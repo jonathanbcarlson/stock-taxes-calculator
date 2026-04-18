@@ -141,6 +141,7 @@
     }
     .derived-price strong { font-weight: 600; }
 
+
     .holding-period-info {
       margin-top: 10px;
       padding: 10px 12px;
@@ -370,16 +371,14 @@
 
     <div class="two-col" style="margin-top:14px;">
       <div class="field">
-        <label>Discount %</label>
-        <input type="number" id="discountPct" min="0" max="15" step="0.5" placeholder="15" value="15">
+        <label for="pricePaidInput">Purchase Price Paid <span class="hint">(per share)</span></label>
+        <input type="number" id="pricePaidInput" min="0" step="0.01" placeholder="0.00">
       </div>
       <div class="field">
-        <label>Shares Purchased</label>
+        <label for="numShares">Shares Purchased</label>
         <input type="number" id="numShares" min="0" step="1" placeholder="100">
       </div>
     </div>
-
-    <div id="yourPurchasePrice" class="derived-price" style="display:none;"></div>
 
     <div class="field" style="margin-top:14px;">
       <label>Sale Price per Share</label>
@@ -515,7 +514,7 @@
   }
 
   const inputs = ['offeringDate','purchaseDate','saleDate','offeringPrice','purchasePrice',
-                  'discountPct','numShares','salePrice','ordinaryRate','ltcgRate'];
+                  'pricePaidInput','numShares','salePrice','ordinaryRate','ltcgRate'];
   inputs.forEach(id => $(id).addEventListener('input', calculate));
   $('grossSalary').addEventListener('input', updateFromSalary);
   $('filingStatus').addEventListener('change', updateFromSalary);
@@ -544,7 +543,6 @@
     const { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS,
             ordRate, cgRate, isQualifying } = params;
 
-    const lowerFMV = Math.min(offeringFMV, purchaseFMV);
     const grossProceeds  = salePricePS * numShares;
     const totalCostBasis = pricePaid * numShares;
 
@@ -554,8 +552,6 @@
       // IRS Pub 525 / IRC §423(c): lesser of
       //   (1) offeringFMV − pricePaid  (spread from grant date FMV to what you paid)
       //   (2) salePrice − pricePaid    (actual total gain)
-      // Uses offeringFMV, NOT lowerFMV — lookback lowers your price but does not
-      // reduce what the IRS treats as ordinary income in a qualifying disposition.
       const discountPS   = offeringFMV - pricePaid;
       const actualGainPS = salePricePS - pricePaid;
       const ordIncPS     = Math.max(0, Math.min(discountPS, actualGainPS));
@@ -641,23 +637,11 @@
     const saleDate     = parseDate($('saleDate').value);
     const offeringFMV  = parseFloat($('offeringPrice').value);
     const purchaseFMV  = parseFloat($('purchasePrice').value);
-    const discountPct  = parseFloat($('discountPct').value) / 100;
+    const pricePaid    = parseFloat($('pricePaidInput').value);
     const numShares    = parseFloat($('numShares').value);
     const salePricePS  = parseFloat($('salePrice').value);
     const ordRate      = parseFloat($('ordinaryRate').value);
     const ltcgRate     = parseFloat($('ltcgRate').value);
-
-    // Derived purchase price
-    if (!isNaN(offeringFMV) && !isNaN(purchaseFMV) && !isNaN(discountPct)) {
-      const lowerFMV  = Math.min(offeringFMV, purchaseFMV);
-      const pricePaid = lowerFMV * (1 - discountPct);
-      $('yourPurchasePrice').style.display = 'block';
-      $('yourPurchasePrice').innerHTML =
-        `Your estimated purchase price: <strong>${fmt$(pricePaid)}</strong>/share ` +
-        `(${(discountPct*100).toFixed(0)}% below ${fmt$(lowerFMV)} FMV)`;
-    } else {
-      $('yourPurchasePrice').style.display = 'none';
-    }
 
     // Holding period info
     const holdingDiv = $('holdingInfo');
@@ -697,7 +681,7 @@
     // Need prices + shares + sale price to show scenarios
     const pricesReady = !isNaN(offeringFMV) && offeringFMV > 0 &&
                         !isNaN(purchaseFMV) && purchaseFMV > 0 &&
-                        !isNaN(discountPct) &&
+                        !isNaN(pricePaid)   && pricePaid > 0 &&
                         !isNaN(numShares)   && numShares > 0 &&
                         !isNaN(salePricePS) && salePricePS > 0;
 
@@ -710,9 +694,6 @@
 
     $('emptyState').style.display = 'none';
     $('scenariosSection').style.display = 'block';
-
-    const lowerFMV  = Math.min(offeringFMV, purchaseFMV);
-    const pricePaid = lowerFMV * (1 - discountPct);
 
     const base = { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS, ordRate };
 
@@ -757,8 +738,7 @@
 
     const purchasePriceStep = step(
       'Your purchase price',
-      `<code>min(Offering/Grant FMV, Purchase FMV) × (1 − discount%)</code><br>
-       = min(${fmt$(offeringFMV)}, ${fmt$(purchaseFMV)}) × (1 − ${(discountPct*100).toFixed(0)}%)`,
+      `As entered — from your ESPP confirmation or brokerage statement.`,
       fmtPS(pricePaid)
     );
 
