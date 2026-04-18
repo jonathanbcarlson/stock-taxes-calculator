@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESPP Tax Calculator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #2563eb;
+      --blue-light: #eff6ff;
+      --blue-mid: #bfdbfe;
+      --green: #16a34a;
+      --green-light: #f0fdf4;
+      --green-mid: #bbf7d0;
+      --orange: #ea580c;
+      --orange-light: #fff7ed;
+      --orange-mid: #fed7aa;
+      --purple: #7c3aed;
+      --purple-light: #f5f3ff;
+      --purple-mid: #ddd6fe;
+      --red: #dc2626;
+      --red-light: #fef2f2;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-900: #111827;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      min-height: 100vh;
+      padding: 0 0 48px;
+    }
+
+    header {
+      background: var(--blue);
+      color: white;
+      padding: 20px 16px 24px;
+      text-align: center;
+    }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    header p  { font-size: 0.875rem; opacity: 0.85; margin-top: 4px; }
+
+    .disclaimer {
+      background: #fefce8;
+      border-bottom: 1px solid #fde68a;
+      padding: 10px 16px;
+      font-size: 0.78rem;
+      color: #713f12;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .container { max-width: 600px; margin: 0 auto; padding: 0 16px; }
+
+    .card {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-top: 16px;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--gray-400);
+      margin-bottom: 14px;
+    }
+
+    .field { margin-bottom: 14px; }
+    .field:last-child { margin-bottom: 0; }
+
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--gray-700);
+      margin-bottom: 5px;
+    }
+    label .hint {
+      font-weight: 400;
+      color: var(--gray-400);
+      font-size: 0.8rem;
+    }
+
+    input[type="date"],
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      font-size: 1rem;
+      color: var(--gray-900);
+      background: white;
+      -webkit-appearance: none;
+      appearance: none;
+      transition: border-color 0.15s;
+    }
+    input[type="date"]:focus,
+    input[type="number"]:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+
+    .field-hint {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--gray-400);
+      margin-top: 4px;
+    }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .three-dates { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 480px) {
+      .three-dates { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    .derived-price {
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: var(--blue-light);
+      border-radius: 8px;
+      font-size: 0.875rem;
+      color: var(--blue);
+    }
+    .derived-price strong { font-weight: 600; }
+
+    .holding-period-info {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+    .holding-period-info.qualifying   { background: var(--green-light);  color: var(--green);  }
+    .holding-period-info.disqualifying{ background: var(--orange-light); color: var(--orange); }
+    .holding-period-info.no-sale      { background: var(--blue-light);   color: var(--blue);   }
+    .holding-period-info strong { font-weight: 600; }
+
+    /* ── Scenario comparison ── */
+    .scenarios-header {
+      margin-top: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--gray-400);
+      padding: 0 2px;
+    }
+
+    .scenario-card {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-top: 10px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .scenario-card.active-scenario {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.08), var(--shadow);
+    }
+
+    .scenario-header {
+      padding: 12px 16px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .scenario-header.st  { background: var(--orange-light); }
+    .scenario-header.ltd { background: var(--purple-light); }
+    .scenario-header.q   { background: var(--green-light);  }
+
+    .scenario-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+    .scenario-header.st  .scenario-title { color: var(--orange); }
+    .scenario-header.ltd .scenario-title { color: var(--purple); }
+    .scenario-header.q   .scenario-title { color: var(--green);  }
+
+    .scenario-subtitle {
+      font-size: 0.75rem;
+      color: var(--gray-600);
+      margin-top: 1px;
+    }
+
+    .current-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: var(--blue);
+      color: white;
+      padding: 3px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .scenario-body { padding: 14px 16px; }
+
+    .s-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--gray-100);
+      font-size: 0.875rem;
+    }
+    .s-row:last-child { border-bottom: none; }
+    .s-row .lbl { color: var(--gray-600); }
+    .s-row .lbl .sub { font-size: 0.75rem; color: var(--gray-400); display: block; margin-top: 1px; }
+    .s-row .val { font-weight: 600; text-align: right; margin-left: 10px; }
+    .s-row .val.pos  { color: var(--green); }
+    .s-row .val.neg  { color: var(--red);   }
+    .s-row .val.neu  { color: var(--gray-700); }
+
+    .s-divider { border: none; border-top: 1.5px solid var(--gray-200); margin: 10px 0; }
+
+    .s-totals {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .s-total-box {
+      border-radius: 8px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .s-total-box.tax     { background: var(--red-light); }
+    .s-total-box.net     { background: var(--green-light); }
+    .s-total-box .t-label{ font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+                           letter-spacing: 0.04em; margin-bottom: 3px; }
+    .s-total-box.tax  .t-label { color: var(--red);   }
+    .s-total-box.net  .t-label { color: var(--green); }
+    .s-total-box .t-value{ font-size: 1.05rem; font-weight: 700; }
+    .s-total-box.tax  .t-value { color: var(--red);   }
+    .s-total-box.net  .t-value { color: var(--green); }
+    .s-eff-rate {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--gray-400);
+      margin-top: 8px;
+    }
+
+    /* Formula details */
+    details.formula { margin-top: 14px; border-top: 1px solid var(--gray-100); padding-top: 10px; }
+    details.formula > summary {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--blue);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      user-select: none;
+    }
+    details.formula > summary::-webkit-details-marker { display: none; }
+    details.formula > summary .arrow { font-size: 0.6rem; transition: transform 0.15s; display: inline-block; }
+    details[open].formula > summary .arrow { transform: rotate(90deg); }
+    .formula-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+    .formula-step { font-size: 0.82rem; }
+    .f-label { font-weight: 600; color: var(--gray-700); margin-bottom: 2px; }
+    .f-eq { color: var(--gray-600); font-size: 0.78rem; line-height: 1.5; }
+    .f-eq code { font-family: ui-monospace, 'SF Mono', monospace; background: var(--gray-100);
+                 padding: 1px 4px; border-radius: 3px; font-size: 0.78rem; }
+    .f-result { color: var(--blue); font-weight: 600; margin-top: 2px; font-size: 0.82rem; }
+    .f-note { font-size: 0.75rem; color: var(--gray-400); margin-top: 2px; font-style: italic; }
+
+    /* When to sell */
+    .when-to-sell {
+      background: var(--blue-light);
+      border: 1.5px solid var(--blue-mid);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .when-to-sell h3 { font-size: 0.875rem; font-weight: 600; color: var(--blue); margin-bottom: 8px; }
+    .when-to-sell p  { font-size: 0.85rem; color: var(--gray-700); line-height: 1.5; }
+    .when-to-sell .qualify-date { font-size: 1.05rem; font-weight: 700; color: var(--blue); margin: 6px 0; }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--gray-400);
+      font-size: 0.875rem;
+    }
+    .empty-state svg { margin-bottom: 8px; opacity: 0.4; }
+
+    footer {
+      margin-top: 32px;
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--gray-400);
+      padding: 0 16px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ESPP Tax Calculator</h1>
+  <p>Estimate taxes on Employee Stock Purchase Plan shares</p>
+</header>
+
+<div class="disclaimer">
+  For educational purposes only. Not tax advice. Consult a qualified tax professional for your specific situation.
+</div>
+
+<div class="container">
+
+  <!-- Dates -->
+  <div class="card">
+    <div class="card-title">Key Dates</div>
+
+    <div class="three-dates">
+      <div class="field">
+        <label for="offeringDate">Offering / Grant Date <span class="hint">(plan start)</span></label>
+        <input type="date" id="offeringDate">
+      </div>
+      <div class="field">
+        <label for="purchaseDate">Purchase Date <span class="hint">(shares bought)</span></label>
+        <input type="date" id="purchaseDate">
+      </div>
+      <div class="field">
+        <label for="saleDate">Sale Date <span class="hint">(when you sold or plan to sell)</span></label>
+        <input type="date" id="saleDate">
+      </div>
+    </div>
+
+    <div id="holdingInfo" style="display:none;"></div>
+  </div>
+
+  <!-- Prices & Shares -->
+  <div class="card">
+    <div class="card-title">Stock Prices &amp; Shares</div>
+
+    <div class="two-col">
+      <div class="field">
+        <label for="offeringPrice">Offering / Grant Date FMV</label>
+        <input type="number" id="offeringPrice" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="field">
+        <label for="purchasePrice">Purchase Date FMV</label>
+        <input type="number" id="purchasePrice" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+
+    <div class="two-col" style="margin-top:14px;">
+      <div class="field">
+        <label>Discount %</label>
+        <input type="number" id="discountPct" min="0" max="15" step="0.5" placeholder="15" value="15">
+      </div>
+      <div class="field">
+        <label>Shares Purchased</label>
+        <input type="number" id="numShares" min="0" step="1" placeholder="100">
+      </div>
+    </div>
+
+    <div id="yourPurchasePrice" class="derived-price" style="display:none;"></div>
+
+    <div class="field" style="margin-top:14px;">
+      <label>Sale Price per Share</label>
+      <input type="number" id="salePrice" min="0" step="0.01" placeholder="0.00">
+    </div>
+  </div>
+
+  <!-- Tax Rates -->
+  <div class="card">
+    <div class="card-title">Your Tax Rates — 2026</div>
+
+    <div class="two-col">
+      <div class="field">
+        <label>Filing Status</label>
+        <select id="filingStatus">
+          <option value="single">Single</option>
+          <option value="mfj">Married Filing Jointly</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Annual Gross Salary <span class="hint">(optional)</span></label>
+        <input type="number" id="grossSalary" min="0" step="1000" placeholder="e.g. 75000">
+      </div>
+    </div>
+
+    <div id="detectedRates" style="display:none;" class="derived-price" style="margin-top:10px;"></div>
+
+    <div class="two-col" style="margin-top:12px;">
+      <div class="field">
+        <label>Ordinary Income Rate <span class="hint">(override)</span></label>
+        <select id="ordinaryRate">
+          <option value="0.10">10%</option>
+          <option value="0.12">12%</option>
+          <option value="0.22" selected>22%</option>
+          <option value="0.24">24%</option>
+          <option value="0.32">32%</option>
+          <option value="0.35">35%</option>
+          <option value="0.37">37%</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Long-Term Cap Gains Rate <span class="hint">(override)</span></label>
+        <select id="ltcgRate">
+          <option value="0.00">0%</option>
+          <option value="0.15" selected>15%</option>
+          <option value="0.20">20%</option>
+        </select>
+      </div>
+    </div>
+    <small class="field-hint" style="margin-top:6px;display:block;">Based on 2026 IRS brackets (One Big Beautiful Bill Act). Enter salary to auto-detect your rates, or override manually.</small>
+  </div>
+
+  <!-- Scenario comparison -->
+  <div id="scenariosSection" style="display:none;">
+    <div class="scenarios-header" id="scenariosHeader"></div>
+    <div id="scenarioST"></div>
+    <div id="scenarioLTD"></div>
+    <div id="scenarioQ"></div>
+  </div>
+
+  <!-- When to sell -->
+  <div id="whenToSell" style="display:none;"></div>
+
+  <div id="emptyState" class="card empty-state">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="2" y="3" width="20" height="18" rx="2"/>
+      <path d="M8 10h8M8 14h5"/>
+    </svg>
+    <p>Fill in the fields above to see your estimated tax breakdown.</p>
+  </div>
+
+</div>
+
+<footer>
+  <p>This tool provides estimates only. Actual taxes depend on your full tax situation, state taxes, AMT, and other factors. Always consult a CPA or tax advisor.</p>
+  <p style="margin-top:6px;">ESPP tax rules per IRS Publication 525.</p>
+</footer>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+
+  // ── 2026 Tax Brackets (One Big Beautiful Bill Act / IRS Rev. Proc.) ──
+  // Source: Tax Foundation, IRS Rev. Proc. 2025-xx; taxfoundation.org/data/all/federal/2026-tax-brackets/
+  const BRACKETS_2026 = {
+    single: [[12400,0.10],[50400,0.12],[105700,0.22],[201775,0.24],[256225,0.32],[640600,0.35],[Infinity,0.37]],
+    mfj:    [[24800,0.10],[100800,0.12],[211400,0.22],[403550,0.24],[512450,0.32],[768700,0.35],[Infinity,0.37]],
+  };
+  const STD_DEDUCTION_2026 = { single: 16100, mfj: 32200 };
+  // LTCG thresholds are on TAXABLE income (after deductions)
+  // 0% up to threshold[0], 15% up to threshold[1], 20% above
+  const LTCG_2026 = {
+    single: [49450, 545500],
+    mfj:    [98900, 613700],
+  };
+
+  function getTaxableIncome(gross, status) {
+    return Math.max(0, gross - STD_DEDUCTION_2026[status]);
+  }
+  function getMarginalRate(taxable, status) {
+    for (const [cap, rate] of BRACKETS_2026[status]) {
+      if (taxable <= cap) return rate;
+    }
+    return 0.37;
+  }
+  function getLTCGRate(taxable, status) {
+    const [t0, t15] = LTCG_2026[status];
+    return taxable <= t0 ? 0.00 : taxable <= t15 ? 0.15 : 0.20;
+  }
+
+  function updateFromSalary() {
+    const gross  = parseFloat($('grossSalary').value);
+    const status = $('filingStatus').value;
+    if (!gross || gross <= 0) { $('detectedRates').style.display = 'none'; return; }
+
+    const taxable  = getTaxableIncome(gross, status);
+    const marginal = getMarginalRate(taxable, status);
+    const ltcg     = getLTCGRate(taxable, status);
+    const stdDed   = STD_DEDUCTION_2026[status];
+
+    // Auto-select dropdowns
+    $('ordinaryRate').value = marginal.toFixed(2);
+    $('ltcgRate').value     = ltcg.toFixed(2);
+
+    $('detectedRates').style.display = 'block';
+    $('detectedRates').innerHTML =
+      `Taxable income ~<strong>$${taxable.toLocaleString('en-US',{maximumFractionDigits:0})}</strong> ` +
+      `(after $${stdDed.toLocaleString('en-US')} standard deduction) → ` +
+      `<strong>${(marginal*100).toFixed(0)}% income</strong> / ` +
+      `<strong>${(ltcg*100).toFixed(0)}% LTCG</strong> marginal rates`;
+
+    calculate();
+  }
+
+  const inputs = ['offeringDate','purchaseDate','saleDate','offeringPrice','purchasePrice',
+                  'discountPct','numShares','salePrice','ordinaryRate','ltcgRate'];
+  inputs.forEach(id => $(id).addEventListener('input', calculate));
+  $('grossSalary').addEventListener('input', updateFromSalary);
+  $('filingStatus').addEventListener('change', updateFromSalary);
+
+  function fmt$(n) {
+    return (n < 0 ? '-$' : '$') +
+      Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  function fmtDate(d) {
+    return d.toLocaleDateString(navigator.language || 'en-US', {year:'numeric', month:'long', day:'numeric'});
+  }
+
+  function parseDate(str) {
+    if (!str) return null;
+    const [y,m,d] = str.split('-').map(Number);
+    return new Date(y, m-1, d);
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((b - a) / (1000 * 60 * 60 * 24));
+  }
+
+  // Compute one scenario's numbers given tax rates for the capital gain
+  function calcScenario(params) {
+    const { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS,
+            ordRate, cgRate, isQualifying } = params;
+
+    const lowerFMV = Math.min(offeringFMV, purchaseFMV);
+    const grossProceeds  = salePricePS * numShares;
+    const totalCostBasis = pricePaid * numShares;
+
+    let ordinaryIncome, capitalGain;
+
+    if (isQualifying) {
+      // IRS Pub 525 / IRC §423(c): lesser of
+      //   (1) offeringFMV − pricePaid  (spread from grant date FMV to what you paid)
+      //   (2) salePrice − pricePaid    (actual total gain)
+      // Uses offeringFMV, NOT lowerFMV — lookback lowers your price but does not
+      // reduce what the IRS treats as ordinary income in a qualifying disposition.
+      const discountPS   = offeringFMV - pricePaid;
+      const actualGainPS = salePricePS - pricePaid;
+      const ordIncPS     = Math.max(0, Math.min(discountPS, actualGainPS));
+      ordinaryIncome     = ordIncPS * numShares;
+      const adjBasisPS   = pricePaid + ordIncPS;  // equals offeringFMV when salePrice ≥ offeringFMV
+      capitalGain        = (salePricePS - adjBasisPS) * numShares;
+    } else {
+      ordinaryIncome = (purchaseFMV - pricePaid) * numShares;
+      capitalGain    = (salePricePS  - purchaseFMV) * numShares;
+    }
+
+    const ordTax    = ordinaryIncome * ordRate;
+    const cgTax     = capitalGain > 0 ? capitalGain * cgRate : 0;
+    const totalTax  = ordTax + cgTax;
+    const netProceeds = grossProceeds - totalTax;
+    const effRate   = grossProceeds > 0 ? totalTax / grossProceeds * 100 : 0;
+
+    return { grossProceeds, totalCostBasis, ordinaryIncome, ordTax, capitalGain, cgTax, totalTax, netProceeds, effRate };
+  }
+
+  function renderScenarioCard(containerId, opts) {
+    const { title, subtitle, headerClass, isCurrent, data, cgRatePct, ordRatePct, cgLabel } = opts;
+    const d = data;
+
+    const cgClass = d.capitalGain >= 0 ? 'pos' : 'neg';
+
+    $( containerId ).innerHTML = `
+      <div class="scenario-card ${isCurrent ? 'active-scenario' : ''}">
+        <div class="scenario-header ${headerClass}">
+          <div>
+            <div class="scenario-title">${title}</div>
+            <div class="scenario-subtitle">${subtitle}</div>
+          </div>
+          ${isCurrent ? '<span class="current-badge">Your scenario</span>' : ''}
+        </div>
+        <div class="scenario-body">
+          <div class="s-row">
+            <div class="lbl">Gross Proceeds</div>
+            <div class="val neu">${fmt$(d.grossProceeds)}</div>
+          </div>
+          <div class="s-row">
+            <div class="lbl">Cost Basis (price paid)</div>
+            <div class="val neu">${fmt$(d.totalCostBasis)}</div>
+          </div>
+          <hr class="s-divider">
+          <div class="s-row">
+            <div class="lbl">Ordinary Income (W-2)<span class="sub">Discount element — taxed at ${ordRatePct}%</span></div>
+            <div class="val neu">${fmt$(d.ordinaryIncome)}</div>
+          </div>
+          <div class="s-row">
+            <div class="lbl">Income Tax</div>
+            <div class="val neg">−${fmt$(d.ordTax)}</div>
+          </div>
+          <div class="s-row">
+            <div class="lbl">Capital Gain / Loss<span class="sub">${cgLabel} — taxed at ${cgRatePct}%</span></div>
+            <div class="val ${cgClass}">${fmt$(d.capitalGain)}</div>
+          </div>
+          ${d.capitalGain > 0 ? `
+          <div class="s-row">
+            <div class="lbl">Capital Gains Tax</div>
+            <div class="val neg">−${fmt$(d.cgTax)}</div>
+          </div>` : ''}
+          <div class="s-totals">
+            <div class="s-total-box tax">
+              <div class="t-label">Total Tax</div>
+              <div class="t-value">${fmt$(d.totalTax)}</div>
+            </div>
+            <div class="s-total-box net">
+              <div class="t-label">Net Proceeds</div>
+              <div class="t-value">${fmt$(d.netProceeds)}</div>
+            </div>
+          </div>
+          <div class="s-eff-rate">Effective tax rate: ${d.effRate.toFixed(1)}%</div>
+          ${opts.formulaHtml || ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function calculate() {
+    const offeringDate = parseDate($('offeringDate').value);
+    const purchaseDate = parseDate($('purchaseDate').value);
+    const saleDate     = parseDate($('saleDate').value);
+    const offeringFMV  = parseFloat($('offeringPrice').value);
+    const purchaseFMV  = parseFloat($('purchasePrice').value);
+    const discountPct  = parseFloat($('discountPct').value) / 100;
+    const numShares    = parseFloat($('numShares').value);
+    const salePricePS  = parseFloat($('salePrice').value);
+    const ordRate      = parseFloat($('ordinaryRate').value);
+    const ltcgRate     = parseFloat($('ltcgRate').value);
+
+    // Derived purchase price
+    if (!isNaN(offeringFMV) && !isNaN(purchaseFMV) && !isNaN(discountPct)) {
+      const lowerFMV  = Math.min(offeringFMV, purchaseFMV);
+      const pricePaid = lowerFMV * (1 - discountPct);
+      $('yourPurchasePrice').style.display = 'block';
+      $('yourPurchasePrice').innerHTML =
+        `Your estimated purchase price: <strong>${fmt$(pricePaid)}</strong>/share ` +
+        `(${(discountPct*100).toFixed(0)}% below ${fmt$(lowerFMV)} FMV)`;
+    } else {
+      $('yourPurchasePrice').style.display = 'none';
+    }
+
+    // Holding period info
+    const holdingDiv = $('holdingInfo');
+    let qualifyDate = null;
+
+    if (offeringDate && purchaseDate) {
+      const q1 = new Date(purchaseDate); q1.setFullYear(q1.getFullYear() + 1);
+      const q2 = new Date(offeringDate);  q2.setFullYear(q2.getFullYear() + 2);
+      qualifyDate = q1 > q2 ? q1 : q2;
+
+      holdingDiv.style.display = 'block';
+
+      if (saleDate) {
+        const isQualifying = saleDate >= qualifyDate;
+        const isLongTerm   = daysBetween(purchaseDate, saleDate) >= 365;
+
+        if (isQualifying) {
+          holdingDiv.className = 'holding-period-info qualifying';
+          holdingDiv.innerHTML = `<strong>Qualifying disposition</strong> — met both holding period requirements.`;
+        } else if (isLongTerm) {
+          holdingDiv.className = 'holding-period-info disqualifying';
+          const daysLeft = daysBetween(saleDate, qualifyDate);
+          holdingDiv.innerHTML = `<strong>Long-term disqualifying</strong> — held 1+ yr from purchase but ${daysLeft.toLocaleString()} days short of qualifying. Qualifying date: <strong>${fmtDate(qualifyDate)}</strong>`;
+        } else {
+          holdingDiv.className = 'holding-period-info disqualifying';
+          const daysLeft = daysBetween(saleDate, qualifyDate);
+          holdingDiv.innerHTML = `<strong>Short-term disqualifying</strong> — held less than 1 year from purchase. Qualifying date: <strong>${fmtDate(qualifyDate)}</strong>`;
+        }
+      } else {
+        holdingDiv.className = 'holding-period-info no-sale';
+        holdingDiv.innerHTML = `Qualifying disposition date: <strong>${fmtDate(qualifyDate)}</strong>`;
+      }
+    } else {
+      holdingDiv.style.display = 'none';
+    }
+
+    // Need prices + shares + sale price to show scenarios
+    const pricesReady = !isNaN(offeringFMV) && offeringFMV > 0 &&
+                        !isNaN(purchaseFMV) && purchaseFMV > 0 &&
+                        !isNaN(discountPct) &&
+                        !isNaN(numShares)   && numShares > 0 &&
+                        !isNaN(salePricePS) && salePricePS > 0;
+
+    if (!pricesReady) {
+      $('scenariosSection').style.display = 'none';
+      $('whenToSell').style.display = 'none';
+      $('emptyState').style.display = 'block';
+      return;
+    }
+
+    $('emptyState').style.display = 'none';
+    $('scenariosSection').style.display = 'block';
+
+    const lowerFMV  = Math.min(offeringFMV, purchaseFMV);
+    const pricePaid = lowerFMV * (1 - discountPct);
+
+    const base = { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS, ordRate };
+
+    // Determine which scenario is current based on sale date
+    let currentScenario = null;
+    if (saleDate && purchaseDate && qualifyDate) {
+      const isQualifying = saleDate >= qualifyDate;
+      const isLongTerm   = daysBetween(purchaseDate, saleDate) >= 365;
+      if (isQualifying)      currentScenario = 'Q';
+      else if (isLongTerm)   currentScenario = 'LTD';
+      else                   currentScenario = 'ST';
+    }
+
+    // Key per-share values for formulas
+    const bargainPS      = purchaseFMV - pricePaid;          // disqualifying ordinary income/share
+    // IRS Pub 525: qualifying ordInc = min(offeringFMV − pricePaid, salePrice − pricePaid)
+    const qDiscountPS    = offeringFMV - pricePaid;          // (1) spread from grant FMV to price paid
+    const actualGainPS   = salePricePS - pricePaid;          // (2) actual total gain
+    const qOrdIncPS      = Math.max(0, Math.min(qDiscountPS, actualGainPS));
+    const qAdjBasisPS    = pricePaid + qOrdIncPS;            // = offeringFMV when salePrice ≥ offeringFMV
+    const disqCapGainPS  = salePricePS - purchaseFMV;
+    const qCapGainPS     = salePricePS - qAdjBasisPS;        // = salePrice − offeringFMV when sale ≥ offering
+
+    // Stock direction determines whether qualifying helps or hurts:
+    // - Stock went UP (purchaseFMV > offeringFMV): qualifying has LESS ordinary income → better
+    // - Stock flat (purchaseFMV = offeringFMV): qualifying = LTD, identical taxes
+    // - Stock went DOWN (purchaseFMV < offeringFMV): qualifying has MORE ordinary income → worse than LTD
+    const stockWentUp   = purchaseFMV > offeringFMV;
+    const stockFlat     = purchaseFMV === offeringFMV;
+    const stockWentDown = purchaseFMV < offeringFMV;
+
+    // ── Formula HTML helpers ──
+    function fmtPS(n) { return fmt$(n) + '/share'; }
+    function step(label, eq, result, note) {
+      return `<div class="formula-step">
+        <div class="f-label">${label}</div>
+        <div class="f-eq">${eq}</div>
+        <div class="f-result">= ${result}</div>
+        ${note ? `<div class="f-note">${note}</div>` : ''}
+      </div>`;
+    }
+
+    const purchasePriceStep = step(
+      'Your purchase price',
+      `<code>min(Offering/Grant FMV, Purchase FMV) × (1 − discount%)</code><br>
+       = min(${fmt$(offeringFMV)}, ${fmt$(purchaseFMV)}) × (1 − ${(discountPct*100).toFixed(0)}%)`,
+      fmtPS(pricePaid)
+    );
+
+    const disqOrdStep = step(
+      'Ordinary income per share (W-2)',
+      `<code>Purchase Date FMV − Your purchase price</code><br>
+       = ${fmt$(purchaseFMV)} − ${fmt$(pricePaid)}`,
+      fmtPS(bargainPS),
+      'This is the bargain element — the discount you received at purchase. Reported on your W-2.'
+    );
+
+    const disqCapStep = step(
+      'Capital gain per share',
+      `<code>Sale price − Purchase Date FMV</code><br>
+       = ${fmt$(salePricePS)} − ${fmt$(purchaseFMV)}`,
+      fmtPS(disqCapGainPS)
+    );
+
+    const qOrdStep = step(
+      'Ordinary income per share (W-2)',
+      `<code>Offering/Grant Date FMV − Your purchase price</code><br>
+       = ${fmt$(offeringFMV)} − ${fmt$(pricePaid)}`,
+      fmtPS(qOrdIncPS),
+      stockWentDown
+        ? `Stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}). The IRS still uses the offering date FMV — so qualifying ordinary income (${fmtPS(qOrdIncPS)}) is larger than disqualifying (${fmtPS(bargainPS)}), making qualifying disposition worse here.`
+        : `Capped at actual gain ${fmtPS(actualGainPS)} if that is smaller (e.g. sale price is below offering date FMV).`
+    );
+
+    const qCapStep = step(
+      'Capital gain per share',
+      `Adjusted basis = Your purchase price + Ordinary income/share = Offering/Grant Date FMV<br>
+       <code>= ${fmt$(pricePaid)} + ${fmt$(qOrdIncPS)} = ${fmt$(qAdjBasisPS)}/share</code><br>
+       Capital gain = <code>Sale price − Adjusted basis = ${fmt$(salePricePS)} − ${fmt$(qAdjBasisPS)}</code>`,
+      fmtPS(qCapGainPS),
+      `When sale price ≥ offering FMV, this simplifies to: Sale price − Offering/Grant Date FMV. Always taxed at the long-term capital gains rate.`
+    );
+
+    function formulaHtml(steps) {
+      return `<details class="formula">
+        <summary><span class="arrow">▶</span> How is this calculated?</summary>
+        <div class="formula-body">${steps.join('')}</div>
+      </details>`;
+    }
+
+    // Scenario 1: Short-term disqualifying
+    const stData = calcScenario({ ...base, cgRate: ordRate, isQualifying: false });
+    renderScenarioCard('scenarioST', {
+      title: 'Disqualifying — Short-Term',
+      subtitle: 'Held less than 1 year from purchase date',
+      headerClass: 'st',
+      isCurrent: currentScenario === 'ST',
+      data: stData,
+      ordRatePct: (ordRate * 100).toFixed(0),
+      cgRatePct:  (ordRate * 100).toFixed(0),
+      cgLabel: 'Short-term gain (ordinary rate)',
+      formulaHtml: formulaHtml([purchasePriceStep, disqOrdStep, disqCapStep]),
+    });
+
+    // Scenario 2: Long-term disqualifying
+    const ltdData = calcScenario({ ...base, cgRate: ltcgRate, isQualifying: false });
+    renderScenarioCard('scenarioLTD', {
+      title: 'Disqualifying — Long-Term',
+      subtitle: 'Held 1+ year from purchase, before qualifying date',
+      headerClass: 'ltd',
+      isCurrent: currentScenario === 'LTD',
+      data: ltdData,
+      ordRatePct: (ordRate * 100).toFixed(0),
+      cgRatePct:  (ltcgRate * 100).toFixed(0),
+      cgLabel: 'Long-term gain (LTCG rate)',
+      formulaHtml: formulaHtml([purchasePriceStep, disqOrdStep, disqCapStep]),
+    });
+
+    // Scenario 3: Qualifying
+    const qData = calcScenario({ ...base, cgRate: ltcgRate, isQualifying: true });
+    renderScenarioCard('scenarioQ', {
+      title: 'Qualifying Disposition',
+      subtitle: 'Held 1+ yr from purchase AND 2+ yrs from offering/grant date',
+      headerClass: 'q',
+      isCurrent: currentScenario === 'Q',
+      data: qData,
+      ordRatePct: (ordRate * 100).toFixed(0),
+      cgRatePct:  (ltcgRate * 100).toFixed(0),
+      cgLabel: 'Long-term gain (LTCG rate)',
+      formulaHtml: formulaHtml([purchasePriceStep, qOrdStep, qCapStep]),
+    });
+
+    $('scenariosHeader').textContent = `All Scenarios — sale at ${fmt$(salePricePS)}/share`;
+
+    // ── When to sell ──
+    const whenDiv = $('whenToSell');
+    if (qualifyDate && purchaseDate) {
+      whenDiv.style.display = 'block';
+      const today = new Date(); today.setHours(0,0,0,0);
+      const daysUntilQualify = daysBetween(today, qualifyDate);
+      const q1 = new Date(purchaseDate); q1.setFullYear(q1.getFullYear() + 1);
+      const daysUntil1Yr = daysBetween(today, q1);
+
+      const savingsLTCG    = stData.totalTax - ltdData.totalTax;
+      const savingsQualify = ltdData.totalTax - qData.totalTax;
+
+      if (currentScenario === 'Q') {
+        whenDiv.innerHTML = `
+          <div class="when-to-sell">
+            <h3>You qualify for favorable treatment</h3>
+            <p>Your sale date meets both holding period requirements. Your discount is taxed as ordinary income and additional gains are taxed at the long-term capital gains rate.</p>
+          </div>`;
+
+      } else if (currentScenario === 'LTD') {
+        if (stockWentDown) {
+          // Qualifying is actually WORSE when stock fell — LTD already optimal
+          whenDiv.innerHTML = `
+            <div class="when-to-sell">
+              <h3>Long-term disqualifying is already optimal</h3>
+              <p>Because the stock fell from the offering date (${fmt$(offeringFMV)}) to the purchase date (${fmt$(purchaseFMV)}), a qualifying disposition would <strong>increase</strong> your ordinary income — the IRS uses the higher offering date FMV as the basis for ordinary income in qualifying sales. Long-term disqualifying gives you a lower tax bill.</p>
+              <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">No need to wait for the qualifying date (${fmtDate(qualifyDate)}).</p>
+            </div>`;
+        } else if (stockFlat || savingsQualify <= 0) {
+          whenDiv.innerHTML = `
+            <div class="when-to-sell">
+              <h3>Long-term is already equivalent to qualifying</h3>
+              <p>Because the offering and purchase date FMVs are equal (${fmt$(offeringFMV)}), qualifying and long-term disqualifying produce identical tax results. No benefit to waiting.</p>
+            </div>`;
+        } else if (daysUntilQualify > 0) {
+          whenDiv.innerHTML = `
+            <div class="when-to-sell">
+              <h3>When should you sell?</h3>
+              <p>Waiting until the qualifying date could save approximately <strong style="color:var(--green)">${fmt$(savingsQualify)}</strong> — the ordinary income portion shrinks from ${fmt$(bargainPS * numShares)} to ${fmt$(qOrdIncPS * numShares)} because the IRS caps it at the offering date discount.</p>
+              <div class="qualify-date">${fmtDate(qualifyDate)}</div>
+              <p>That's <strong>${daysUntilQualify.toLocaleString()} days</strong> from today.</p>
+              <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">Note: stock price may change. Weigh tax savings against market risk before deciding.</p>
+            </div>`;
+        } else {
+          whenDiv.innerHTML = '';
+        }
+
+      } else if (currentScenario === 'ST') {
+        let savingsHtml = '';
+        if (savingsLTCG > 0 && daysUntil1Yr > 0) {
+          savingsHtml += `<p style="margin-top:8px;">Holding until <strong>1 year from purchase</strong> (${fmtDate(q1)}) would save approximately <strong style="color:var(--green)">${fmt$(savingsLTCG)}</strong> — capital gains taxed at the long-term rate (${(ltcgRate*100).toFixed(0)}%) instead of ordinary income rate (${(ordRate*100).toFixed(0)}%).</p>`;
+        }
+        if (stockWentDown) {
+          savingsHtml += `<p style="margin-top:8px;">Because the stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}), <strong>long-term disqualifying is better than qualifying</strong> — qualifying would increase your ordinary income. No need to wait past 1 year from purchase.</p>`;
+        } else if (stockFlat) {
+          savingsHtml += `<p style="margin-top:8px;">Since offering and purchase FMVs are equal, long-term disqualifying and qualifying give identical tax results.</p>`;
+        } else if (savingsQualify > 0 && daysUntilQualify > 0) {
+          savingsHtml += `<p style="margin-top:8px;">Waiting the full qualifying period (${fmtDate(qualifyDate)}) would save an additional <strong style="color:var(--green)">${fmt$(savingsQualify)}</strong> by reducing the ordinary income portion.</p>`;
+        }
+        whenDiv.innerHTML = `
+          <div class="when-to-sell">
+            <h3>When should you sell?</h3>
+            ${savingsHtml}
+            <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">Note: stock price may change. Weigh tax savings against market risk before deciding.</p>
+          </div>`;
+
+      } else {
+        // No sale date entered — show milestones
+        if (stockWentDown) {
+          whenDiv.innerHTML = `
+            <div class="when-to-sell">
+              <h3>Holding period milestones</h3>
+              <p>1 year from purchase (best outcome): <strong>${fmtDate(q1)}</strong></p>
+              <p style="margin-top:6px;">Because the stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}), long-term disqualifying is actually better than qualifying — qualifying would raise your ordinary income. No tax benefit to waiting for the qualifying date.</p>
+            </div>`;
+        } else {
+          whenDiv.innerHTML = `
+            <div class="when-to-sell">
+              <h3>Holding period milestones</h3>
+              <p>1 year from purchase (long-term LTCG rate): <strong>${fmtDate(q1)}</strong></p>
+              ${!stockFlat ? `<p style="margin-top:6px;">Qualifying disposition date (lower ordinary income): <strong>${fmtDate(qualifyDate)}</strong></p>` : ''}
+            </div>`;
+        }
+      }
+    } else {
+      whenDiv.style.display = 'none';
+    }
+  }
+
+  // Default sale date = today
+  const today = new Date();
+  $('saleDate').value = today.toISOString().split('T')[0];
+  calculate();
+</script>
+</body>
+</html>
