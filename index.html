@@ -125,9 +125,14 @@
       margin-top: 4px;
     }
 
-    .two-col { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: end; }
+    .two-col { display: grid; grid-template-columns: 1fr; gap: 12px; }
     @media (min-width: 440px) {
       .two-col { grid-template-columns: 1fr 1fr; }
+      /* Flex column so label stays top and input is pushed to the same
+         bottom edge across both cells, even when one label wraps. */
+      .two-col > .field { display: flex; flex-direction: column; }
+      .two-col > .field > input,
+      .two-col > .field > select { margin-top: auto; }
     }
     .three-dates { display: grid; grid-template-columns: 1fr; gap: 12px; }
     @media (min-width: 480px) {
@@ -583,7 +588,7 @@
     <div id="s_detectedRates" style="display:none;" class="derived-price"></div>
     <div class="two-col" style="margin-top:12px;">
       <div class="field">
-        <label>Ordinary Income Rate <span class="hint">(short-term CG rate)</span></label>
+        <label>Ordinary Income Rate <span class="hint">(short-term)</span></label>
         <select id="s_ordRate">
           <option value="0.10">10%</option>
           <option value="0.12">12%</option>
