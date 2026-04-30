@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESPP Tax Calculator</title>
+  <title>Stock Tax Calculator</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -317,20 +317,123 @@
       padding: 0 16px;
       line-height: 1.6;
     }
+
+    /* ── Tab navigation ── */
+    .tab-nav {
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .tab-nav-inner {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 0 16px;
+      display: flex;
+    }
+    .tab-btn {
+      padding: 12px 16px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--gray-400);
+      background: none;
+      border: none;
+      border-bottom: 2.5px solid transparent;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--gray-700); }
+    .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Break-even result ── */
+    .be-hero {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px 20px;
+      margin-top: 16px;
+      text-align: center;
+      border-left: 4px solid var(--gray-200);
+    }
+    .be-hero.level-high { border-left-color: var(--green);  }
+    .be-hero.level-mid  { border-left-color: var(--blue);   }
+    .be-hero.level-low  { border-left-color: var(--orange); }
+    .be-hero.level-none { border-left-color: var(--red);    }
+    .be-drop-pct {
+      font-size: 2.6rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .be-drop-label {
+      font-size: 0.8rem;
+      color: var(--gray-400);
+      margin-top: 5px;
+      margin-bottom: 10px;
+    }
+    .be-price-note { font-size: 0.875rem; color: var(--gray-600); line-height: 1.55; }
+    .be-compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .be-box { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .be-box-hdr { padding: 9px 14px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+    .be-box.st .be-box-hdr { background: var(--orange-light); color: var(--orange); }
+    .be-box.lt .be-box-hdr { background: var(--green-light);  color: var(--green);  }
+    .be-box-body { padding: 10px 14px; }
+    .be-box-body .s-row { font-size: 0.82rem; }
+    .be-extra {
+      background: var(--green-light);
+      border: 1.5px solid var(--green-mid);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-top: 10px;
+      font-size: 0.875rem;
+      color: var(--gray-700);
+      line-height: 1.5;
+    }
+    .be-extra strong { color: var(--green); }
+    .be-info {
+      background: var(--blue-light);
+      border: 1.5px solid var(--blue-mid);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-top: 10px;
+      font-size: 0.875rem;
+      color: var(--gray-700);
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>ESPP Tax Calculator</h1>
-  <p>Estimate taxes on Employee Stock Purchase Plan shares</p>
+  <h1>Stock Tax Calculator</h1>
+  <p>ESPP tax estimator &amp; stock break-even analysis &nbsp;·&nbsp; 2026 IRS brackets</p>
 </header>
 
 <div class="disclaimer">
   For educational purposes only. Not tax advice. Consult a qualified tax professional for your specific situation.
 </div>
 
+<nav class="tab-nav">
+  <div class="tab-nav-inner">
+    <button class="tab-btn active" data-tab="espp">ESPP Calculator</button>
+    <button class="tab-btn" data-tab="stocks">Stock Break-Even</button>
+  </div>
+</nav>
+
 <div class="container">
+
+<div id="tab-espp" class="tab-pane active">
 
   <!-- Dates -->
   <div class="card">
@@ -450,44 +553,98 @@
     <p>Fill in the fields above to see your estimated tax breakdown.</p>
   </div>
 
-</div>
+</div><!-- /tab-espp -->
+
+<!-- ══════════════════════════════════════════════════════
+     Stock Break-Even Tab
+     Question: how far can the price fall and LTCG still beats selling short-term?
+     ══════════════════════════════════════════════════════ -->
+<div id="tab-stocks" class="tab-pane">
+
+  <!-- Tax Rates -->
+  <div class="card">
+    <div class="card-title">Your Tax Rates — 2026</div>
+    <div class="two-col">
+      <div class="field">
+        <label>Filing Status</label>
+        <select id="s_filingStatus">
+          <option value="single">Single</option>
+          <option value="mfj">Married Filing Jointly</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Annual Gross Salary <span class="hint">(optional)</span></label>
+        <input type="number" id="s_grossSalary" min="0" step="1000" placeholder="e.g. 75000">
+      </div>
+    </div>
+    <div id="s_detectedRates" style="display:none;" class="derived-price"></div>
+    <div class="two-col" style="margin-top:12px;">
+      <div class="field">
+        <label>Ordinary Income Rate <span class="hint">(short-term CG rate)</span></label>
+        <select id="s_ordRate">
+          <option value="0.10">10%</option>
+          <option value="0.12">12%</option>
+          <option value="0.22" selected>22%</option>
+          <option value="0.24">24%</option>
+          <option value="0.32">32%</option>
+          <option value="0.35">35%</option>
+          <option value="0.37">37%</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Long-Term Cap Gains Rate</label>
+        <select id="s_ltcgRate">
+          <option value="0.00">0%</option>
+          <option value="0.15" selected>15%</option>
+          <option value="0.20">20%</option>
+        </select>
+      </div>
+    </div>
+    <small class="field-hint" style="margin-top:6px;display:block;">Based on 2026 IRS brackets (One Big Beautiful Bill Act). Enter salary to auto-detect your rates, or override manually.</small>
+  </div>
+
+  <!-- Stock Details -->
+  <div class="card">
+    <div class="card-title">Stock Details</div>
+    <div class="two-col">
+      <div class="field">
+        <label>Purchase Price <span class="hint">(cost basis / share)</span></label>
+        <input type="number" id="s_purchasePrice" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="field">
+        <label>Current Price <span class="hint">(short-term sell price)</span></label>
+        <input type="number" id="s_currentPrice" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px;">
+      <label>Number of Shares <span class="hint">(optional — for total $ amounts)</span></label>
+      <input type="number" id="s_numShares" min="0" step="1" placeholder="e.g. 100">
+    </div>
+  </div>
+
+  <!-- Break-even result (populated by JS) -->
+  <div id="s_result" style="display:none;"></div>
+
+  <div id="s_empty" class="card empty-state">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+      <polyline points="16 7 22 7 22 13"/>
+    </svg>
+    <p>Enter your purchase price and current price to see the break-even analysis.</p>
+  </div>
+
+</div><!-- /tab-stocks -->
+
+</div><!-- /container -->
 
 <footer>
   <p>This tool provides estimates only. Actual taxes depend on your full tax situation, state taxes, AMT, and other factors. Always consult a CPA or tax advisor.</p>
   <p style="margin-top:6px;">ESPP tax rules per IRS Publication 525.</p>
 </footer>
 
+<script src="lib/espp-core.js"></script>
 <script>
   const $ = id => document.getElementById(id);
-
-
-  // ── 2026 Tax Brackets (One Big Beautiful Bill Act / IRS Rev. Proc.) ──
-  // Source: Tax Foundation, IRS Rev. Proc. 2025-xx; taxfoundation.org/data/all/federal/2026-tax-brackets/
-  const BRACKETS_2026 = {
-    single: [[12400,0.10],[50400,0.12],[105700,0.22],[201775,0.24],[256225,0.32],[640600,0.35],[Infinity,0.37]],
-    mfj:    [[24800,0.10],[100800,0.12],[211400,0.22],[403550,0.24],[512450,0.32],[768700,0.35],[Infinity,0.37]],
-  };
-  const STD_DEDUCTION_2026 = { single: 16100, mfj: 32200 };
-  // LTCG thresholds are on TAXABLE income (after deductions)
-  // 0% up to threshold[0], 15% up to threshold[1], 20% above
-  const LTCG_2026 = {
-    single: [49450, 545500],
-    mfj:    [98900, 613700],
-  };
-
-  function getTaxableIncome(gross, status) {
-    return Math.max(0, gross - STD_DEDUCTION_2026[status]);
-  }
-  function getMarginalRate(taxable, status) {
-    for (const [cap, rate] of BRACKETS_2026[status]) {
-      if (taxable <= cap) return rate;
-    }
-    return 0.37;
-  }
-  function getLTCGRate(taxable, status) {
-    const [t0, t15] = LTCG_2026[status];
-    return taxable <= t0 ? 0.00 : taxable <= t15 ? 0.15 : 0.20;
-  }
 
   function updateFromSalary() {
     const gross  = parseFloat($('grossSalary').value);
@@ -920,6 +1077,167 @@
   const today = new Date();
   $('saleDate').value = today.toISOString().split('T')[0];
   calculate();
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ── Stock Break-Even Tab ───────────────────────────────────────────────────
+
+  function updateFromSalaryStocks() {
+    const gross  = parseFloat($('s_grossSalary').value);
+    const status = $('s_filingStatus').value;
+    if (!gross || gross <= 0) { $('s_detectedRates').style.display = 'none'; calculateBreakEven(); return; }
+
+    const taxable  = getTaxableIncome(gross, status);
+    const marginal = getMarginalRate(taxable, status);
+    const ltcg     = getLTCGRate(taxable, status);
+    const stdDed   = STD_DEDUCTION_2026[status];
+
+    $('s_ordRate').value  = marginal.toFixed(2);
+    $('s_ltcgRate').value = ltcg.toFixed(2);
+
+    $('s_detectedRates').style.display = 'block';
+    $('s_detectedRates').innerHTML =
+      `Taxable income ~<strong>$${taxable.toLocaleString('en-US',{maximumFractionDigits:0})}</strong> ` +
+      `(after $${stdDed.toLocaleString('en-US')} standard deduction) → ` +
+      `<strong>${(marginal*100).toFixed(0)}% income</strong> / ` +
+      `<strong>${(ltcg*100).toFixed(0)}% LTCG</strong> marginal rates`;
+
+    calculateBreakEven();
+  }
+
+  function calculateBreakEven() {
+    const B        = parseFloat($('s_purchasePrice').value);
+    const P        = parseFloat($('s_currentPrice').value);
+    const sharesRaw = parseFloat($('s_numShares').value);
+    const numShares = !isNaN(sharesRaw) && sharesRaw > 0 ? sharesRaw : null;
+    const ordRate  = parseFloat($('s_ordRate').value);
+    const ltcgRate = parseFloat($('s_ltcgRate').value);
+
+    const ready = !isNaN(B) && B > 0 && !isNaN(P) && P > 0;
+    if (!ready) {
+      $('s_result').style.display = 'none';
+      $('s_empty').style.display  = 'block';
+      return;
+    }
+
+    $('s_empty').style.display  = 'none';
+    $('s_result').style.display = 'block';
+
+    const gain = P - B;
+
+    // Stock at or below cost basis — no short-term gain to compare
+    if (gain <= 0) {
+      $('s_result').innerHTML = `
+        <div class="be-info">
+          <strong>No unrealized gain.</strong> You currently have an unrealized loss or are at breakeven.
+          Both short-term and long-term dispositions would produce a capital loss — there is no holding-period
+          tradeoff to analyze. Long-term losses can offset capital gains; short-term losses can offset
+          ordinary income gains first.
+        </div>`;
+      return;
+    }
+
+    // No rate benefit when rates are equal (edge case via manual override)
+    if (ordRate <= ltcgRate) {
+      $('s_result').innerHTML = `
+        <div class="be-info">
+          Your ordinary income rate (${(ordRate*100).toFixed(0)}%) is not higher than your LTCG rate
+          (${(ltcgRate*100).toFixed(0)}%), so there is no tax benefit to holding for long-term
+          capital gains treatment.
+        </div>`;
+      return;
+    }
+
+    // Break-even price: minimum long-term sell price that matches short-term net proceeds at P.
+    // Derivation: P(1−t_ord) + B(t_ord−t_ltcg) = X(1−t_ltcg)
+    const X       = (P * (1 - ordRate) + B * (ordRate - ltcgRate)) / (1 - ltcgRate);
+    const dropPct = (P - X) / P * 100;
+
+    // Per-share tax figures
+    const stTaxPS    = gain * ordRate;
+    const stNetPS    = P - stTaxPS;
+
+    const ltBEGainPS = X - B;
+    const ltBETaxPS  = ltBEGainPS > 0 ? ltBEGainPS * ltcgRate : 0;
+    const ltBENetPS  = X - ltBETaxPS;
+
+    const ltCurGainPS = gain;
+    const ltCurTaxPS  = ltCurGainPS * ltcgRate;
+    const ltCurNetPS  = P - ltCurTaxPS;
+    const extraPS     = ltCurNetPS - stNetPS;   // savings per share if price holds at P
+
+    const level = dropPct >= 15 ? 'level-high' : dropPct >= 5 ? 'level-mid' : 'level-low';
+    const color = dropPct >= 15 ? 'var(--green)' : dropPct >= 5 ? 'var(--blue)' : 'var(--orange)';
+
+    function fmtTotal(perShare) {
+      if (!numShares) return '';
+      return `<div class="s-row">
+        <span class="lbl" style="color:var(--gray-400);">Total (${numShares.toLocaleString()} shares)</span>
+        <span class="val neu">${fmt$(perShare * numShares)}</span>
+      </div>`;
+    }
+
+    $('s_result').innerHTML = `
+      <div class="be-hero ${level}">
+        <div class="be-drop-pct" style="color:${color}">▼ ${dropPct.toFixed(1)}%</div>
+        <div class="be-drop-label">maximum price drop before long-term stops being better</div>
+        <div class="be-price-note">
+          Stock can fall from <strong>${fmt$(P)}</strong> to <strong>${fmt$(X)}</strong>
+          and selling long-term would still net you the same as selling short-term today.
+        </div>
+      </div>
+
+      <div class="be-compare">
+        <div class="be-box st">
+          <div class="be-box-hdr">Sell Short-Term Now</div>
+          <div class="be-box-body">
+            <div class="s-row"><span class="lbl">Price</span><span class="val neu">${fmt$(P)}</span></div>
+            <div class="s-row"><span class="lbl">Gain&thinsp;/&thinsp;share</span><span class="val pos">${fmt$(gain)}</span></div>
+            <div class="s-row"><span class="lbl">Tax&thinsp;(${(ordRate*100).toFixed(0)}%)</span><span class="val neg">−${fmt$(stTaxPS)}</span></div>
+            <hr class="s-divider">
+            <div class="s-row"><span class="lbl"><strong>Net&thinsp;/&thinsp;share</strong></span><span class="val neu"><strong>${fmt$(stNetPS)}</strong></span></div>
+            ${fmtTotal(stNetPS)}
+          </div>
+        </div>
+        <div class="be-box lt">
+          <div class="be-box-hdr">Long-Term Break-Even</div>
+          <div class="be-box-body">
+            <div class="s-row"><span class="lbl">Price</span><span class="val neu">${fmt$(X)}</span></div>
+            <div class="s-row"><span class="lbl">Gain&thinsp;/&thinsp;share</span><span class="val pos">${fmt$(ltBEGainPS)}</span></div>
+            <div class="s-row"><span class="lbl">Tax&thinsp;(${(ltcgRate*100).toFixed(0)}%)</span><span class="val neg">−${fmt$(ltBETaxPS)}</span></div>
+            <hr class="s-divider">
+            <div class="s-row"><span class="lbl"><strong>Net&thinsp;/&thinsp;share</strong></span><span class="val neu"><strong>${fmt$(ltBENetPS)}</strong></span></div>
+            ${fmtTotal(ltBENetPS)}
+          </div>
+        </div>
+      </div>
+
+      ${extraPS > 0 ? `
+      <div class="be-extra">
+        <strong>If the price holds at ${fmt$(P)}:</strong> waiting for long-term treatment saves
+        <strong>${fmt$(extraPS)}/share${numShares ? ` (${fmt$(extraPS * numShares)} on ${numShares.toLocaleString()} shares)` : ''}</strong>
+        — LTCG rate (${(ltcgRate*100).toFixed(0)}%) vs ordinary income rate (${(ordRate*100).toFixed(0)}%).
+      </div>` : ''}
+
+      <div style="margin-top:10px;font-size:0.75rem;color:var(--gray-400);text-align:center;padding:0 8px;">
+        Break-even assumes the stock must be held at least 1 year from purchase for long-term treatment.
+        Does not account for state taxes, dividends, or opportunity cost.
+      </div>
+    `;
+  }
+
+  const sInputs = ['s_purchasePrice', 's_currentPrice', 's_numShares', 's_ordRate', 's_ltcgRate'];
+  sInputs.forEach(id => $(id).addEventListener('input', calculateBreakEven));
+  $('s_grossSalary').addEventListener('input',  updateFromSalaryStocks);
+  $('s_filingStatus').addEventListener('change', updateFromSalaryStocks);
 </script>
 </body>
 </html>
