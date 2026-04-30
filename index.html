@@ -1208,23 +1208,23 @@
           </div>
         </div>
         <div class="be-box lt">
-          <div class="be-box-hdr">Long-Term Break-Even</div>
+          <div class="be-box-hdr">Sell Long-Term at ${fmt$(P)}</div>
           <div class="be-box-body">
-            <div class="s-row"><span class="lbl">Price</span><span class="val neu">${fmt$(X)}</span></div>
-            <div class="s-row"><span class="lbl">Gain&thinsp;/&thinsp;share</span><span class="val pos">${fmt$(ltBEGainPS)}</span></div>
-            <div class="s-row"><span class="lbl">Tax&thinsp;(${(ltcgRate*100).toFixed(0)}%)</span><span class="val neg">−${fmt$(ltBETaxPS)}</span></div>
+            <div class="s-row"><span class="lbl">Price</span><span class="val neu">${fmt$(P)}</span></div>
+            <div class="s-row"><span class="lbl">Gain&thinsp;/&thinsp;share</span><span class="val pos">${fmt$(ltCurGainPS)}</span></div>
+            <div class="s-row"><span class="lbl">Tax&thinsp;(${(ltcgRate*100).toFixed(0)}%)</span><span class="val neg">−${fmt$(ltCurTaxPS)}</span></div>
             <hr class="s-divider">
-            <div class="s-row"><span class="lbl"><strong>Net&thinsp;/&thinsp;share</strong></span><span class="val neu"><strong>${fmt$(ltBENetPS)}</strong></span></div>
-            ${fmtTotal(ltBENetPS)}
+            <div class="s-row"><span class="lbl"><strong>Net&thinsp;/&thinsp;share</strong></span><span class="val pos"><strong>${fmt$(ltCurNetPS)}</strong></span></div>
+            ${fmtTotal(ltCurNetPS)}
           </div>
         </div>
       </div>
 
       ${extraPS > 0 ? `
       <div class="be-extra">
-        <strong>If the price holds at ${fmt$(P)}:</strong> waiting for long-term treatment saves
-        <strong>${fmt$(extraPS)}/share${numShares ? ` (${fmt$(extraPS * numShares)} on ${numShares.toLocaleString()} shares)` : ''}</strong>
-        — LTCG rate (${(ltcgRate*100).toFixed(0)}%) vs ordinary income rate (${(ordRate*100).toFixed(0)}%).
+        Waiting for long-term treatment saves <strong>${fmt$(extraPS)}/share${numShares ? ` (${fmt$(extraPS * numShares)} on ${numShares.toLocaleString()} shares)` : ''}</strong>
+        if the price holds at ${fmt$(P)} — LTCG rate (${(ltcgRate*100).toFixed(0)}%) vs ordinary rate (${(ordRate*100).toFixed(0)}%).
+        The stock can drop all the way to <strong>${fmt$(X)}</strong> (▼${dropPct.toFixed(1)}%) before long-term stops being worth it.
       </div>` : ''}
 
       <div style="margin-top:10px;font-size:0.75rem;color:var(--gray-400);text-align:center;padding:0 8px;">
