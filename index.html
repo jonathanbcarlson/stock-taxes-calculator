@@ -998,6 +998,22 @@
         <p style="margin-top:8px;">Here the stock fell from ${fmt$(offeringFMV)} to ${fmt$(purchaseFMV)}, so the discount you actually received at purchase was only ${fmtPS(bargainPS)} — less than the ${fmtPS(qDiscountPS)} grant-date cap. Because it then recovered to ${fmt$(salePricePS)}, qualifying would report <strong>${fmtPS(qOrdIncPenaltyPS)} more</strong> ordinary income, costing roughly <strong>${fmt$(-savingsQualify)}</strong> extra in tax.</p>
         <p style="margin-top:8px;">The difference is small, but long-term disqualifying is the lower bill.</p>`;
 
+      // Reached only when daysUntilQualify <= 0, which forces saleDate < qualifyDate <=
+      // today — so the entered sale date is itself in the past and every milestone that
+      // could improve it has arrived. The shares may well still be held, so say what
+      // selling today would be worth instead of rendering nothing at all.
+      function passedMilestonesHtml(currentData, currentLabel) {
+        const savingNow = currentData.totalTax - qData.totalTax;
+        const verdict = savingNow > 0.005
+          ? `selling now would be a <strong>qualifying disposition</strong> — roughly <strong style="color:var(--green)">${fmt$(savingNow)}</strong> less tax at ${fmt$(salePricePS)}/share.`
+          : `selling now would be a <strong>qualifying disposition</strong>, though at ${fmt$(salePricePS)}/share it works out to the same tax.`;
+        return `
+          <h3>The qualifying date has already passed</h3>
+          <p>Your sale date (${fmtDate(saleDate)}) falls before the qualifying date, so it is taxed as ${currentLabel}. That date — <strong>${fmtDate(qualifyDate)}</strong> — has since arrived.</p>
+          <p style="margin-top:8px;">If you still hold these shares, ${verdict}</p>
+          <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">Note: stock price may change. Weigh tax savings against market risk before deciding.</p>`;
+      }
+
       const qSameExplain = stockFlat
         ? `Because the offering and purchase date FMVs are equal (${fmt$(offeringFMV)}), the ${discountPct} grant-date cap and the discount you received at purchase are the same number — qualifying and long-term disqualifying produce identical tax results. No benefit to waiting.`
         : `At this sale price both report the same ordinary income (${fmtPS(qOrdIncPS)}), so qualifying and long-term disqualifying come out to the same tax. No benefit to waiting.`;
@@ -1034,7 +1050,8 @@
               <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">Note: stock price may change. Weigh tax savings against market risk before deciding.</p>
             </div>`;
         } else {
-          whenDiv.innerHTML = '';
+          whenDiv.innerHTML = `
+            <div class="when-to-sell">${passedMilestonesHtml(ltdData, 'a long-term disqualifying sale')}</div>`;
         }
 
       } else if (currentScenario === 'ST') {
@@ -1049,12 +1066,15 @@
         } else if (savingsQualify > 0 && daysUntilQualify > 0) {
           savingsHtml += `<p style="margin-top:8px;">Waiting the full qualifying period (${fmtDate(qualifyDate)}) would save an additional <strong style="color:var(--green)">${fmt$(savingsQualify)}</strong> by reducing the ordinary income portion.</p>`;
         }
-        whenDiv.innerHTML = `
-          <div class="when-to-sell">
-            <h3>When should you sell?</h3>
-            ${savingsHtml}
-            <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">Note: stock price may change. Weigh tax savings against market risk before deciding.</p>
-          </div>`;
+        // An empty savingsHtml means both the 1-year and qualifying dates have passed:
+        // a "When should you sell?" heading with nothing under it helps nobody.
+        whenDiv.innerHTML = savingsHtml
+          ? `<div class="when-to-sell">
+              <h3>When should you sell?</h3>
+              ${savingsHtml}
+              <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">Note: stock price may change. Weigh tax savings against market risk before deciding.</p>
+            </div>`
+          : `<div class="when-to-sell">${passedMilestonesHtml(stData, 'a short-term disqualifying sale')}</div>`;
 
       } else {
         // No sale date entered — show milestones
@@ -1074,6 +1094,10 @@
             </div>`;
         }
       }
+
+      // Every branch above is meant to produce advice. If one ever doesn't, hide the
+      // panel rather than leaving an empty element in the flow.
+      if (!whenDiv.innerHTML.trim()) whenDiv.style.display = 'none';
     } else {
       whenDiv.style.display = 'none';
     }
