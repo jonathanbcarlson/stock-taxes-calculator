@@ -39,7 +39,12 @@ that case long-term disqualifying is the better outcome, which the calculator sa
 
 ## Deployment
 
-Hosted on GitHub Pages from the `main` branch root. No build step — `index.html` is the entire app.
+Hosted on GitHub Pages from the `main` branch root. No build step: `index.html` is the
+page and `lib/espp-core.js` is the tax math it loads. Both must be deployed.
+
+`lib/espp-core.js` is the single source of truth for the calculations — it is what
+`npm test` exercises and what the page runs. Don't inline a second copy into
+`index.html`; the two will drift.
 
 ## Disclaimer
 

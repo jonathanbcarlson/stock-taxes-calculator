@@ -377,6 +377,133 @@ describe('calcScenario — discountRate does not touch disqualifying disposition
 });
 
 
+// ── calcScenario — invariants across the whole input space ───────────────────
+//
+// The fixtures above pin specific numbers; these sweep a grid of price/discount
+// combinations and assert the properties that must hold for every one of them.
+// A deterministic grid (not random input) so a failure is always reproducible.
+
+describe('calcScenario — invariants over a price/discount grid', () => {
+  const lots = [];
+  for (const offeringFMV of [10, 30, 100])
+    for (const purchaseFMV of [5, 10, 29.5, 30, 30.5, 100, 150])
+      for (const discountRate of [0, 0.05, 0.10, 0.125, 0.15])
+        for (const salePricePS of [0.5, 1, 5, 10, 25, 29.5, 30, 30.5, 100, 200]) {
+          // price paid under a lookback plan: discount off the lower of the two FMVs
+          const pricePaid = (1 - discountRate) * Math.min(offeringFMV, purchaseFMV);
+          lots.push({ offeringFMV, purchaseFMV, pricePaid, discountRate, salePricePS,
+                      numShares: 100, ordRate: 0.24, cgRate: 0.15 });
+        }
+
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+
+  it('covers 1,050 price/discount combinations', () => assert.strictEqual(lots.length, 1_050));
+
+  it('qualifying: ordinary income is never negative', () => {
+    for (const lot of lots) {
+      const r = calcScenario({ ...lot, isQualifying: true });
+      assert.ok(r.ordinaryIncome >= 0, `negative OI for ${JSON.stringify(lot)}`);
+    }
+  });
+
+  it('qualifying: ordinary income never exceeds the §423(c) cap', () => {
+    for (const lot of lots) {
+      const r = calcScenario({ ...lot, isQualifying: true });
+      const cap = lot.discountRate * lot.offeringFMV * lot.numShares;
+      assert.ok(r.ordinaryIncome <= cap + 1e-9,
+        `OI ${r.ordinaryIncome} exceeds cap ${cap} for ${JSON.stringify(lot)}`);
+    }
+  });
+
+  it('qualifying: ordinary income never exceeds the actual gain', () => {
+    for (const lot of lots) {
+      const r = calcScenario({ ...lot, isQualifying: true });
+      const gain = (lot.salePricePS - lot.pricePaid) * lot.numShares;
+      assert.ok(r.ordinaryIncome <= Math.max(0, gain) + 1e-9,
+        `OI ${r.ordinaryIncome} exceeds gain ${gain} for ${JSON.stringify(lot)}`);
+    }
+  });
+
+  it('ordinary income + capital gain always equals the total economic gain', () => {
+    // No dollar is lost or double-counted between the two buckets, in either scenario.
+    for (const lot of lots) {
+      for (const isQualifying of [true, false]) {
+        const r = calcScenario({ ...lot, isQualifying });
+        const total = (lot.salePricePS - lot.pricePaid) * lot.numShares;
+        assert.ok(near(r.ordinaryIncome + r.capitalGain, total),
+          `${r.ordinaryIncome} + ${r.capitalGain} != ${total} for ${JSON.stringify(lot)}`);
+      }
+    }
+  });
+
+  it('a capital loss is never taxed', () => {
+    for (const lot of lots) {
+      for (const isQualifying of [true, false]) {
+        const r = calcScenario({ ...lot, isQualifying });
+        if (r.capitalGain < 0) assert.strictEqual(r.cgTax, 0);
+      }
+    }
+  });
+
+  it('net proceeds always equal gross proceeds minus total tax', () => {
+    for (const lot of lots) {
+      for (const isQualifying of [true, false]) {
+        const r = calcScenario({ ...lot, isQualifying });
+        assert.ok(near(r.netProceeds, r.grossProceeds - r.totalTax),
+          `netProceeds mismatch for ${JSON.stringify(lot)}`);
+      }
+    }
+  });
+
+  it('no NaN or Infinity ever reaches the UI', () => {
+    for (const lot of lots) {
+      for (const isQualifying of [true, false]) {
+        const r = calcScenario({ ...lot, isQualifying });
+        for (const [k, v] of Object.entries(r)) {
+          assert.ok(Number.isFinite(v), `${k} = ${v} for ${JSON.stringify(lot)}`);
+        }
+      }
+    }
+  });
+
+  it('qualifying beats disqualifying whenever the sale is at or below the purchase FMV', () => {
+    // The §423(c) cap doing the job it was written for. Above the purchase FMV the
+    // comparison can flip — that is the disadvantage the calculator warns about.
+    for (const lot of lots) {
+      if (lot.salePricePS > lot.purchaseFMV) continue;
+      const q   = calcScenario({ ...lot, isQualifying: true });
+      const ltd = calcScenario({ ...lot, isQualifying: false });
+      assert.ok(q.totalTax <= ltd.totalTax + 1e-9,
+        `qualifying ${q.totalTax} > disqualifying ${ltd.totalTax} for ${JSON.stringify(lot)}`);
+    }
+  });
+
+  it('the qualifying penalty never exceeds discount × (offeringFMV − purchaseFMV)', () => {
+    // The bound that makes the disadvantage "small" — the claim the UI copy makes.
+    for (const lot of lots) {
+      const q   = calcScenario({ ...lot, isQualifying: true });
+      const ltd = calcScenario({ ...lot, isQualifying: false });
+      const extraOrdInc = q.ordinaryIncome - ltd.ordinaryIncome;
+      if (extraOrdInc <= 0) continue;
+      const bound = lot.discountRate
+        * Math.max(0, lot.offeringFMV - lot.purchaseFMV) * lot.numShares;
+      assert.ok(extraOrdInc <= bound + 1e-9,
+        `penalty ${extraOrdInc} exceeds bound ${bound} for ${JSON.stringify(lot)}`);
+    }
+  });
+
+  it('qualifying never reports more ordinary income when the stock rose to purchase', () => {
+    for (const lot of lots) {
+      if (lot.purchaseFMV < lot.offeringFMV) continue;
+      const q   = calcScenario({ ...lot, isQualifying: true });
+      const ltd = calcScenario({ ...lot, isQualifying: false });
+      assert.ok(q.ordinaryIncome <= ltd.ordinaryIncome + 1e-9,
+        `qualifying OI ${q.ordinaryIncome} > disqualifying ${ltd.ordinaryIncome} for ${JSON.stringify(lot)}`);
+    }
+  });
+});
+
+
 // ── calcScenario — Disqualifying Dispositions ─────────────────────────────────
 //
 // Ordinary income = (purchaseFMV − pricePaid) × shares   [always due, per W-2]

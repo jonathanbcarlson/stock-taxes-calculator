@@ -705,40 +705,10 @@
     return Math.round((b - a) / (1000 * 60 * 60 * 24));
   }
 
-  // Compute one scenario's numbers given tax rates for the capital gain
-  function calcScenario(params) {
-    const { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS,
-            ordRate, cgRate, isQualifying, discountRate = ESPP_DISCOUNT_RATE } = params;
-
-    const grossProceeds  = salePricePS * numShares;
-    const totalCostBasis = pricePaid * numShares;
-
-    let ordinaryIncome, capitalGain;
-
-    if (isQualifying) {
-      // IRS Pub 525 / IRC §423(c): lesser of
-      //   (1) discountRate × offeringFMV  (the discount measured at the GRANT date)
-      //   (2) salePrice − pricePaid       (actual total gain)
-      // (1) is NOT offeringFMV − pricePaid — see lib/espp-core.js for why.
-      const grantDiscountPS = discountRate * offeringFMV;
-      const actualGainPS    = salePricePS - pricePaid;
-      const ordIncPS        = Math.max(0, Math.min(grantDiscountPS, actualGainPS));
-      ordinaryIncome        = ordIncPS * numShares;
-      const adjBasisPS      = pricePaid + ordIncPS;  // ordinary income is never taxed twice
-      capitalGain           = (salePricePS - adjBasisPS) * numShares;
-    } else {
-      ordinaryIncome = (purchaseFMV - pricePaid) * numShares;
-      capitalGain    = (salePricePS  - purchaseFMV) * numShares;
-    }
-
-    const ordTax    = ordinaryIncome * ordRate;
-    const cgTax     = capitalGain > 0 ? capitalGain * cgRate : 0;
-    const totalTax  = ordTax + cgTax;
-    const netProceeds = grossProceeds - totalTax;
-    const effRate   = grossProceeds > 0 ? totalTax / grossProceeds * 100 : 0;
-
-    return { grossProceeds, totalCostBasis, ordinaryIncome, ordTax, capitalGain, cgTax, totalTax, netProceeds, effRate };
-  }
+  // calcScenario, getTaxableIncome, getMarginalRate, getLTCGRate and the 2026 bracket
+  // tables all come from lib/espp-core.js, loaded above. That file is the single source
+  // of truth for the tax math and is what tests/espp.test.js exercises — don't inline a
+  // second copy here.
 
   function renderScenarioCard(containerId, opts) {
     const { title, subtitle, headerClass, isCurrent, data, cgRatePct, ordRatePct, cgLabel } = opts;
@@ -890,9 +860,9 @@
     const qAdjBasisPS    = pricePaid + qOrdIncPS;
     const disqCapGainPS  = salePricePS - purchaseFMV;
     const qCapGainPS     = salePricePS - qAdjBasisPS;
-    // "15%", "12.5%" — drop the decimal when it adds nothing
-    const pctNum         = discountRate * 100;
-    const discountPct    = pctNum.toFixed(Number.isInteger(pctNum) ? 0 : 1) + '%';
+    // "15%", "12.5%" — toFixed clears float noise (0.15 * 100), unary + drops
+    // trailing zeros, so the label always matches the rate actually used.
+    const discountPct    = +(discountRate * 100).toFixed(4) + '%';
 
     const stockFlat = purchaseFMV === offeringFMV;
 
