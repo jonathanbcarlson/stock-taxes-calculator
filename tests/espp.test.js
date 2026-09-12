@@ -105,9 +105,10 @@ describe('getLTCGRate — married filing jointly 2026', () => {
 
 // ── calcScenario — Qualifying Dispositions ───────────────────────────────────
 //
-// IRS §423(c): ordinary income = min(offeringFMV − pricePaid, salePrice − pricePaid)
-// Adjusted basis per share     = pricePaid + ordIncPS
-// Capital gain                 = (salePrice − adjBasis) × shares  [always LTCG]
+// IRC §423(c): ordinary income = min(salePrice − pricePaid, discountRate × offeringFMV)
+// The cap is the discount measured at the GRANT date — discountRate defaults to the
+// standard 15%. Adjusted basis per share = pricePaid + ordIncPS
+// Capital gain = (salePrice − adjBasis) × shares  [always LTCG]
 
 describe('calcScenario — qualifying: stock rose from offering to purchase date (TurboTax / The Finance Buff)', () => {
   // Source: thefinancebuff.com/adjust-cost-basis-for-espp-sale-in-turbotax.html
@@ -152,15 +153,18 @@ describe('calcScenario — qualifying: stock flat from offering to purchase (Mor
   it('effRate — 7.2%',                               () => approx(r.effRate, 7.2, 'effRate'));
 });
 
-describe('calcScenario — qualifying: adjusted basis equals offeringFMV when sale > offeringFMV (NASPP)', () => {
+describe('calcScenario — qualifying: 10%-discount plan, stock rose (NASPP)', () => {
   // Source: naspp.com/blog/disqualifying-vs-qualifying-espps
+  // This plan discounts 10%, not 15% ($36 paid = 90% of the $40 grant FMV), so the
+  // §423(c) cap is 10% × $40. Exercises the discountRate override.
   //   offeringFMV=$40  purchaseFMV=$45  pricePaid=$36  100 shares  sale=$60
-  //   ordIncPS = min($4, $24) = $4  →  adjBasis = $36+$4 = $40 = offeringFMV ✓
+  //   grantDiscountPS = 10% × $40 = $4   actualGainPS = $24
+  //   ordIncPS = min($4, $24) = $4  →  adjBasis = $36+$4 = $40 = offeringFMV
   //   capitalGain = ($60−$40) × 100 = $2,000
   const r = calcScenario({
     offeringFMV: 40, purchaseFMV: 45, pricePaid: 36,
     numShares: 100,  salePricePS: 60,
-    ordRate: 0.30, cgRate: 0.15, isQualifying: true,
+    ordRate: 0.30, cgRate: 0.15, isQualifying: true, discountRate: 0.10,
   });
 
   it('ordinaryIncome — offering discount $4 × 100', () => assert.strictEqual(r.ordinaryIncome,    400));
@@ -172,11 +176,11 @@ describe('calcScenario — qualifying: adjusted basis equals offeringFMV when sa
   it('effRate — 7%',                                () => approx(r.effRate, 7, 'effRate'));
 });
 
-describe('calcScenario — qualifying: OI capped at actual gain when sale price < offeringFMV', () => {
-  // §423(c): OI = min(offeringDiscount, actualGain); when stock dips below
-  // offeringFMV before sale the $15 discount is capped at the $5 actual gain.
+describe('calcScenario — qualifying: OI capped at actual gain when the gain is the smaller leg', () => {
+  // §423(c): OI = min(actualGain, grantDiscount); here the $15 grant-date discount
+  // is capped down to the $5 actual gain.
   //   offeringFMV=$100  purchaseFMV=$90  pricePaid=$85  10 shares  sale=$90
-  //   discountPS=$15  actualGainPS=$5  →  ordIncPS = $5 (capped)
+  //   grantDiscountPS = 15% × $100 = $15   actualGainPS = $5  →  ordIncPS = $5 (capped)
   //   adjBasis = $85+$5 = $90  capitalGain = $0
   const r = calcScenario({
     offeringFMV: 100, purchaseFMV: 90, pricePaid: 85,
@@ -196,6 +200,7 @@ describe('calcScenario — qualifying: OI capped at actual gain when sale price 
 describe('calcScenario — qualifying: sale below cost basis → zero OI and capital loss (CAM Investor)', () => {
   // Source: caminvestor.com/can-i-lose-money-in-my-espp-company-stock
   //   offeringFMV=$20  purchaseFMV=$10  pricePaid=$8.50  100 shares  sale=$5
+  //   grantDiscountPS = 15% × $20 = $3
   //   actualGainPS = $5−$8.50 = −$3.50  →  ordIncPS = max(0, −$3.50) = $0
   //   capitalGain = ($5−$8.50) × 100 = −$350
   const r = calcScenario({
@@ -211,6 +216,94 @@ describe('calcScenario — qualifying: sale below cost basis → zero OI and cap
   it('totalTax — zero',                                  () => assert.strictEqual(r.totalTax,           0));
   it('netProceeds — equals grossProceeds',               () => assert.strictEqual(r.netProceeds,      500));
   it('effRate — 0%',                                     () => assert.strictEqual(r.effRate,             0));
+});
+
+
+// ── calcScenario — the grant-date cap when the stock FELL before purchase ─────
+//
+// A 15% lookback plan: grant FMV $30, stock fell to $20 by the purchase date, so the
+// price paid is 85% of the LOWER purchase FMV = $17. The §423(c) cap is measured off
+// the GRANT FMV (15% × $30 = $4.50), NOT offeringFMV − pricePaid ($30 − $17 = $13).
+//
+// The cap exists to let you recoup part of the drop while the stock stays down. Once
+// the stock recovers past the purchase FMV it stops helping: the $4.50 grant-date cap
+// then exceeds the $3.00 discount actually received at purchase, so a qualifying sale
+// reports MORE ordinary income than a disqualifying one. The gap is bounded at
+// 15% × (grantFMV − purchaseFMV) = $1.50/share, which is why the penalty stays small.
+
+describe('calcScenario — qualifying: stock fell then recovered (qualifying costs slightly more)', () => {
+  //   offeringFMV=$30  purchaseFMV=$20  pricePaid=$17  100 shares  sale=$25
+  //   grantDiscountPS = 15% × $30 = $4.50   actualGainPS = $25−$17 = $8
+  //   ordIncPS = min($8, $4.50) = $4.50  →  adjBasis = $21.50
+  //   capitalGain = ($25−$21.50) × 100 = $350
+  const r = calcScenario({
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 17,
+    numShares: 100,  salePricePS: 25,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: true,
+  });
+
+  it('ordinaryIncome — grant-date cap $4.50 × 100',   () => assert.strictEqual(r.ordinaryIncome,   450));
+  it('ordinaryIncome — NOT the old $13 spread × 100', () => assert.notStrictEqual(r.ordinaryIncome, 1_300));
+  it('capitalGain — sale minus adjusted basis',       () => assert.strictEqual(r.capitalGain,      350));
+  it('ordTax — 22% of $450',                          () => approx(r.ordTax,                        99, 'ordTax'));
+  it('cgTax — 15% of $350',                           () => approx(r.cgTax,                       52.5, 'cgTax'));
+  it('totalTax',                                      () => approx(r.totalTax,                   151.5, 'totalTax'));
+  it('netProceeds',                                   () => approx(r.netProceeds,               2_348.5, 'netProceeds'));
+
+  // The same shares sold as a long-term disqualifying disposition (fixture below):
+  // ordinary income is only the $3 purchase-date bargain, for $141 of total tax.
+  const ltd = calcScenario({
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 17,
+    numShares: 100,  salePricePS: 25,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: false,
+  });
+
+  it('reports more ordinary income than long-term disqualifying', () => {
+    assert.ok(r.ordinaryIncome > ltd.ordinaryIncome,
+      `qualifying OI ${r.ordinaryIncome} should exceed disqualifying OI ${ltd.ordinaryIncome}`);
+  });
+  it('costs more tax than long-term disqualifying — by $10.50', () => {
+    approx(r.totalTax - ltd.totalTax, 10.5, 'qualifying penalty');
+  });
+});
+
+describe('calcScenario — qualifying: grant-date cap holds no matter how far the stock runs', () => {
+  // Same $30 → $20 drop, but sold at $40 — well above the grant FMV. The old
+  // offeringFMV − pricePaid formula would have reported $13 × 100 = $1,300 of
+  // ordinary income; the cap keeps it at $4.50 × 100 and sends the rest to LTCG.
+  const r = calcScenario({
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 17,
+    numShares: 100,  salePricePS: 40,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: true,
+  });
+
+  it('ordinaryIncome — still capped at $4.50 × 100', () => assert.strictEqual(r.ordinaryIncome,   450));
+  it('capitalGain — the rest of the gain',           () => assert.strictEqual(r.capitalGain,    1_850));
+  it('totalTax',                                     () => approx(r.totalTax,                   376.5, 'totalTax'));
+});
+
+describe('calcScenario — qualifying: stock fell and stayed down (qualifying still wins)', () => {
+  // Same $30 → $20 drop, sold at $19 — below the purchase FMV, so the cap is doing the
+  // job it was written for. Ordinary income is the $2 actual gain, versus the $3
+  // purchase-date bargain a disqualifying sale would owe on a stock that lost money.
+  const r = calcScenario({
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 17,
+    numShares: 100,  salePricePS: 19,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: true,
+  });
+  const ltd = calcScenario({
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 17,
+    numShares: 100,  salePricePS: 19,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: false,
+  });
+
+  it('ordinaryIncome — actual gain $2 × 100, under the $4.50 cap', () => assert.strictEqual(r.ordinaryIncome, 200));
+  it('capitalGain — zero (basis stepped up to sale price)',        () => assert.strictEqual(r.capitalGain,      0));
+  it('totalTax — $44',                                             () => assert.strictEqual(r.totalTax,        44));
+  it('beats long-term disqualifying ($66)', () => {
+    assert.ok(r.totalTax < ltd.totalTax,
+      `qualifying ${r.totalTax} should beat disqualifying ${ltd.totalTax}`);
+  });
 });
 
 

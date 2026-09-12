@@ -701,7 +701,7 @@
   // Compute one scenario's numbers given tax rates for the capital gain
   function calcScenario(params) {
     const { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS,
-            ordRate, cgRate, isQualifying } = params;
+            ordRate, cgRate, isQualifying, discountRate = ESPP_DISCOUNT_RATE } = params;
 
     const grossProceeds  = salePricePS * numShares;
     const totalCostBasis = pricePaid * numShares;
@@ -710,14 +710,15 @@
 
     if (isQualifying) {
       // IRS Pub 525 / IRC §423(c): lesser of
-      //   (1) offeringFMV − pricePaid  (spread from grant date FMV to what you paid)
-      //   (2) salePrice − pricePaid    (actual total gain)
-      const discountPS   = offeringFMV - pricePaid;
-      const actualGainPS = salePricePS - pricePaid;
-      const ordIncPS     = Math.max(0, Math.min(discountPS, actualGainPS));
-      ordinaryIncome     = ordIncPS * numShares;
-      const adjBasisPS   = pricePaid + ordIncPS;  // equals offeringFMV when salePrice ≥ offeringFMV
-      capitalGain        = (salePricePS - adjBasisPS) * numShares;
+      //   (1) discountRate × offeringFMV  (the discount measured at the GRANT date)
+      //   (2) salePrice − pricePaid       (actual total gain)
+      // (1) is NOT offeringFMV − pricePaid — see lib/espp-core.js for why.
+      const grantDiscountPS = discountRate * offeringFMV;
+      const actualGainPS    = salePricePS - pricePaid;
+      const ordIncPS        = Math.max(0, Math.min(grantDiscountPS, actualGainPS));
+      ordinaryIncome        = ordIncPS * numShares;
+      const adjBasisPS      = pricePaid + ordIncPS;  // ordinary income is never taxed twice
+      capitalGain           = (salePricePS - adjBasisPS) * numShares;
     } else {
       ordinaryIncome = (purchaseFMV - pricePaid) * numShares;
       capitalGain    = (salePricePS  - purchaseFMV) * numShares;
@@ -869,21 +870,22 @@
 
     // Key per-share values for formulas
     const bargainPS      = purchaseFMV - pricePaid;          // disqualifying ordinary income/share
-    // IRS Pub 525: qualifying ordInc = min(offeringFMV − pricePaid, salePrice − pricePaid)
-    const qDiscountPS    = offeringFMV - pricePaid;          // (1) spread from grant FMV to price paid
+    // IRC §423(c): qualifying ordInc = min(salePrice − pricePaid, 15% × offeringFMV)
+    const qDiscountPS    = ESPP_DISCOUNT_RATE * offeringFMV; // (1) discount measured at the GRANT date
     const actualGainPS   = salePricePS - pricePaid;          // (2) actual total gain
     const qOrdIncPS      = Math.max(0, Math.min(qDiscountPS, actualGainPS));
-    const qAdjBasisPS    = pricePaid + qOrdIncPS;            // = offeringFMV when salePrice ≥ offeringFMV
+    const qAdjBasisPS    = pricePaid + qOrdIncPS;
     const disqCapGainPS  = salePricePS - purchaseFMV;
-    const qCapGainPS     = salePricePS - qAdjBasisPS;        // = salePrice − offeringFMV when sale ≥ offering
+    const qCapGainPS     = salePricePS - qAdjBasisPS;
+    const discountPct    = (ESPP_DISCOUNT_RATE * 100).toFixed(0) + '%';
 
-    // Stock direction determines whether qualifying helps or hurts:
-    // - Stock went UP (purchaseFMV > offeringFMV): qualifying has LESS ordinary income → better
-    // - Stock flat (purchaseFMV = offeringFMV): qualifying = LTD, identical taxes
-    // - Stock went DOWN (purchaseFMV < offeringFMV): qualifying has MORE ordinary income → worse than LTD
-    const stockWentUp   = purchaseFMV > offeringFMV;
-    const stockFlat     = purchaseFMV === offeringFMV;
-    const stockWentDown = purchaseFMV < offeringFMV;
+    const stockFlat = purchaseFMV === offeringFMV;
+
+    // The §423(c) cap is measured off the GRANT date FMV, so when the stock fell
+    // between grant and purchase the cap can exceed the discount actually received
+    // at purchase — qualifying then reports MORE ordinary income than disqualifying.
+    const qOrdIncPenaltyPS = qOrdIncPS - bargainPS;
+    const qOrdIncWorse     = qOrdIncPenaltyPS > 0.005;   // cent-level tolerance
 
     // ── Formula HTML helpers ──
     function fmtPS(n) { return fmt$(n) + '/share'; }
@@ -919,21 +921,22 @@
 
     const qOrdStep = step(
       'Ordinary income per share (W-2)',
-      `<code>Offering/Grant Date FMV − Your purchase price</code><br>
-       = ${fmt$(offeringFMV)} − ${fmt$(pricePaid)}`,
+      `<code>min(Sale price − Your purchase price, ${discountPct} × Offering/Grant Date FMV)</code><br>
+       = min(${fmt$(salePricePS)} − ${fmt$(pricePaid)}, ${discountPct} × ${fmt$(offeringFMV)})<br>
+       = min(${fmt$(actualGainPS)}, ${fmt$(qDiscountPS)})`,
       fmtPS(qOrdIncPS),
-      stockWentDown
-        ? `Stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}). The IRS still uses the offering date FMV — so qualifying ordinary income (${fmtPS(qOrdIncPS)}) is larger than disqualifying (${fmtPS(bargainPS)}), making qualifying disposition worse here.`
-        : `Capped at actual gain ${fmtPS(actualGainPS)} if that is smaller (e.g. sale price is below offering date FMV).`
+      qOrdIncWorse
+        ? `The cap is the ${discountPct} discount measured at the <em>offering</em> date (${fmtPS(qDiscountPS)}), not the discount you actually got at purchase (${fmtPS(bargainPS)}) — the stock fell from ${fmt$(offeringFMV)} to ${fmt$(purchaseFMV)}, so the offering date figure is the bigger of the two. At this sale price that makes qualifying report ${fmtPS(qOrdIncPenaltyPS)} <em>more</em> ordinary income than a disqualifying sale.`
+        : `Assumes the standard ${discountPct} ESPP discount. The cap is ${fmtPS(qDiscountPS)}; below that, ordinary income is just your actual gain (${fmtPS(actualGainPS)}), so a sale at or under your purchase price reports none at all.`
     );
 
     const qCapStep = step(
       'Capital gain per share',
-      `Adjusted basis = Your purchase price + Ordinary income/share = Offering/Grant Date FMV<br>
+      `Adjusted basis = Your purchase price + Ordinary income/share<br>
        <code>= ${fmt$(pricePaid)} + ${fmt$(qOrdIncPS)} = ${fmt$(qAdjBasisPS)}/share</code><br>
        Capital gain = <code>Sale price − Adjusted basis = ${fmt$(salePricePS)} − ${fmt$(qAdjBasisPS)}</code>`,
       fmtPS(qCapGainPS),
-      `When sale price ≥ offering FMV, this simplifies to: Sale price − Offering/Grant Date FMV. Always taxed at the long-term capital gains rate.`
+      `Your basis steps up by whatever was taxed as ordinary income, so the same dollar is never taxed twice. Always taxed at the long-term capital gains rate.`
     );
 
     function formulaHtml(steps) {
@@ -999,6 +1002,21 @@
       const savingsLTCG    = stData.totalTax - ltdData.totalTax;
       const savingsQualify = ltdData.totalTax - qData.totalTax;
 
+      // Drive the recommendation off the actual tax numbers rather than the stock
+      // direction alone: when the stock fell from grant to purchase, qualifying is
+      // better while the stock stays down and worse once it recovers past purchase.
+      const qIsWorse = savingsQualify < -0.005;   // cent-level tolerance
+      const qIsSame  = Math.abs(savingsQualify) <= 0.005;
+
+      const qWorseExplain = `
+        <p>A qualifying disposition caps ordinary income at <strong>${discountPct} of the offering date FMV</strong> (${fmtPS(qDiscountPS)}). That cap is there to help you when the stock <em>drops</em> between the offering and purchase dates — it lets you recoup part of the loss. It does not help once the stock recovers.</p>
+        <p style="margin-top:8px;">Here the stock fell from ${fmt$(offeringFMV)} to ${fmt$(purchaseFMV)}, so the discount you actually received at purchase was only ${fmtPS(bargainPS)} — less than the ${fmtPS(qDiscountPS)} grant-date cap. Because it then recovered to ${fmt$(salePricePS)}, qualifying would report <strong>${fmtPS(qOrdIncPenaltyPS)} more</strong> ordinary income, costing roughly <strong>${fmt$(-savingsQualify)}</strong> extra in tax.</p>
+        <p style="margin-top:8px;">The difference is small, but long-term disqualifying is the lower bill.</p>`;
+
+      const qSameExplain = stockFlat
+        ? `Because the offering and purchase date FMVs are equal (${fmt$(offeringFMV)}), the ${discountPct} grant-date cap and the discount you received at purchase are the same number — qualifying and long-term disqualifying produce identical tax results. No benefit to waiting.`
+        : `At this sale price both report the same ordinary income (${fmtPS(qOrdIncPS)}), so qualifying and long-term disqualifying come out to the same tax. No benefit to waiting.`;
+
       if (currentScenario === 'Q') {
         whenDiv.innerHTML = `
           <div class="when-to-sell">
@@ -1007,25 +1025,25 @@
           </div>`;
 
       } else if (currentScenario === 'LTD') {
-        if (stockWentDown) {
-          // Qualifying is actually WORSE when stock fell — LTD already optimal
+        if (qIsWorse) {
+          // Qualifying costs MORE here — LTD is already optimal
           whenDiv.innerHTML = `
             <div class="when-to-sell">
               <h3>Long-term disqualifying is already optimal</h3>
-              <p>Because the stock fell from the offering date (${fmt$(offeringFMV)}) to the purchase date (${fmt$(purchaseFMV)}), a qualifying disposition would <strong>increase</strong> your ordinary income — the IRS uses the higher offering date FMV as the basis for ordinary income in qualifying sales. Long-term disqualifying gives you a lower tax bill.</p>
+              ${qWorseExplain}
               <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">No need to wait for the qualifying date (${fmtDate(qualifyDate)}).</p>
             </div>`;
-        } else if (stockFlat || savingsQualify <= 0) {
+        } else if (qIsSame) {
           whenDiv.innerHTML = `
             <div class="when-to-sell">
               <h3>Long-term is already equivalent to qualifying</h3>
-              <p>Because the offering and purchase date FMVs are equal (${fmt$(offeringFMV)}), qualifying and long-term disqualifying produce identical tax results. No benefit to waiting.</p>
+              <p>${qSameExplain}</p>
             </div>`;
         } else if (daysUntilQualify > 0) {
           whenDiv.innerHTML = `
             <div class="when-to-sell">
               <h3>When should you sell?</h3>
-              <p>Waiting until the qualifying date could save approximately <strong style="color:var(--green)">${fmt$(savingsQualify)}</strong> — the ordinary income portion shrinks from ${fmt$(bargainPS * numShares)} to ${fmt$(qOrdIncPS * numShares)} because the IRS caps it at the offering date discount.</p>
+              <p>Waiting until the qualifying date could save approximately <strong style="color:var(--green)">${fmt$(savingsQualify)}</strong> — the ordinary income portion shrinks from ${fmt$(bargainPS * numShares)} to ${fmt$(qOrdIncPS * numShares)} because the IRS caps it at ${discountPct} of the offering date FMV (${fmtPS(qDiscountPS)}).</p>
               <div class="qualify-date">${fmtDate(qualifyDate)}</div>
               <p>That's <strong>${daysUntilQualify.toLocaleString()} days</strong> from today.</p>
               <p style="margin-top:8px;font-size:0.78rem;color:var(--gray-400);">Note: stock price may change. Weigh tax savings against market risk before deciding.</p>
@@ -1039,10 +1057,10 @@
         if (savingsLTCG > 0 && daysUntil1Yr > 0) {
           savingsHtml += `<p style="margin-top:8px;">Holding until <strong>1 year from purchase</strong> (${fmtDate(q1)}) would save approximately <strong style="color:var(--green)">${fmt$(savingsLTCG)}</strong> — capital gains taxed at the long-term rate (${(ltcgRate*100).toFixed(0)}%) instead of ordinary income rate (${(ordRate*100).toFixed(0)}%).</p>`;
         }
-        if (stockWentDown) {
-          savingsHtml += `<p style="margin-top:8px;">Because the stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}), <strong>long-term disqualifying is better than qualifying</strong> — qualifying would increase your ordinary income. No need to wait past 1 year from purchase.</p>`;
-        } else if (stockFlat) {
-          savingsHtml += `<p style="margin-top:8px;">Since offering and purchase FMVs are equal, long-term disqualifying and qualifying give identical tax results.</p>`;
+        if (qIsWorse) {
+          savingsHtml += `<p style="margin-top:8px;"><strong>Long-term disqualifying beats qualifying here.</strong> The stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}) and then recovered, so the ${discountPct} grant-date cap (${fmtPS(qDiscountPS)}) is larger than the discount you actually received at purchase (${fmtPS(bargainPS)}) — qualifying would add ${fmtPS(qOrdIncPenaltyPS)} of ordinary income, about ${fmt$(-savingsQualify)} more tax. No need to wait past 1 year from purchase.</p>`;
+        } else if (qIsSame) {
+          savingsHtml += `<p style="margin-top:8px;">${qSameExplain}</p>`;
         } else if (savingsQualify > 0 && daysUntilQualify > 0) {
           savingsHtml += `<p style="margin-top:8px;">Waiting the full qualifying period (${fmtDate(qualifyDate)}) would save an additional <strong style="color:var(--green)">${fmt$(savingsQualify)}</strong> by reducing the ordinary income portion.</p>`;
         }
@@ -1055,19 +1073,19 @@
 
       } else {
         // No sale date entered — show milestones
-        if (stockWentDown) {
+        if (qIsWorse) {
           whenDiv.innerHTML = `
             <div class="when-to-sell">
               <h3>Holding period milestones</h3>
               <p>1 year from purchase (best outcome): <strong>${fmtDate(q1)}</strong></p>
-              <p style="margin-top:6px;">Because the stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}), long-term disqualifying is actually better than qualifying — qualifying would raise your ordinary income. No tax benefit to waiting for the qualifying date.</p>
+              <p style="margin-top:6px;">At ${fmt$(salePricePS)}/share, long-term disqualifying beats qualifying. The stock fell from offering (${fmt$(offeringFMV)}) to purchase (${fmt$(purchaseFMV)}) and then recovered past it, so the ${discountPct} grant-date cap (${fmtPS(qDiscountPS)}) exceeds the discount you received at purchase (${fmtPS(bargainPS)}) — qualifying would raise your ordinary income by ${fmtPS(qOrdIncPenaltyPS)}. No tax benefit to waiting for the qualifying date.</p>
             </div>`;
         } else {
           whenDiv.innerHTML = `
             <div class="when-to-sell">
               <h3>Holding period milestones</h3>
               <p>1 year from purchase (long-term LTCG rate): <strong>${fmtDate(q1)}</strong></p>
-              ${!stockFlat ? `<p style="margin-top:6px;">Qualifying disposition date (lower ordinary income): <strong>${fmtDate(qualifyDate)}</strong></p>` : ''}
+              ${!qIsSame ? `<p style="margin-top:6px;">Qualifying disposition date (lower ordinary income): <strong>${fmtDate(qualifyDate)}</strong></p>` : ''}
             </div>`;
         }
       }
