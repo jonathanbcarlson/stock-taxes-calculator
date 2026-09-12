@@ -1,0 +1,31 @@
+name: Tests
+
+# The tax math in lib/espp-core.js is the thing most worth protecting here, and
+# tests/espp.test.js is what protects it. Run it on every push and pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported LTS and current. No dependencies to install, so there is
+        # nothing to cache and no lockfile to restore — npm test runs straight off
+        # the checkout.
+        node-version: ['20.x', '22.x']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - run: npm test

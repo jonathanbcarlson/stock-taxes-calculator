@@ -46,6 +46,16 @@ page and `lib/espp-core.js` is the tax math it loads. Both must be deployed.
 `npm test` exercises and what the page runs. Don't inline a second copy into
 `index.html`; the two will drift.
 
+## Tests
+
+```
+npm test
+```
+
+No dependencies to install — `tests/espp.test.js` runs on Node's built-in test runner
+against `lib/espp-core.js`. GitHub Actions runs the same command on every push and pull
+request (Node 20 and 22).
+
 ## Disclaimer
 
 For educational purposes only. Not tax advice. Consult a qualified CPA or tax advisor for your specific situation.
