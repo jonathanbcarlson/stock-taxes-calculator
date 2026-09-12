@@ -486,9 +486,16 @@
       </div>
     </div>
 
-    <div class="field" style="margin-top:14px;">
-      <label>Sale Price per Share</label>
-      <input type="number" id="salePrice" min="0" step="0.01" placeholder="0.00">
+    <div class="two-col" style="margin-top:14px;">
+      <div class="field">
+        <label for="salePrice">Sale Price per Share</label>
+        <input type="number" id="salePrice" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="field">
+        <label for="discountPctInput">Plan Discount <span class="hint">(15% max by law)</span></label>
+        <input type="number" id="discountPctInput" min="0" max="15" step="0.5" value="15"
+               title="Your plan's purchase discount. IRC §423(b)(6) caps it at 15%. Only affects qualifying dispositions.">
+      </div>
     </div>
   </div>
 
@@ -674,7 +681,7 @@
   }
 
   const inputs = ['offeringDate','purchaseDate','saleDate','offeringPrice','purchasePrice',
-                  'pricePaidInput','numShares','salePrice','ordinaryRate','ltcgRate'];
+                  'pricePaidInput','numShares','salePrice','discountPctInput','ordinaryRate','ltcgRate'];
   inputs.forEach(id => $(id).addEventListener('input', calculate));
   $('grossSalary').addEventListener('input', updateFromSalary);
   $('filingStatus').addEventListener('change', updateFromSalary);
@@ -802,6 +809,12 @@
     const numShares    = parseFloat($('numShares').value);
     const salePricePS  = parseFloat($('salePrice').value);
     const ordRate      = parseFloat($('ordinaryRate').value);
+    // Plan discount, entered as a percent. Blank falls back to the 15% default;
+    // IRC §423(b)(6) makes anything above 15% impossible for a qualified plan.
+    const enteredPct   = parseFloat($('discountPctInput').value);
+    const discountRate = isNaN(enteredPct)
+      ? ESPP_DISCOUNT_RATE
+      : Math.min(Math.max(enteredPct, 0), 15) / 100;
     const ltcgRate     = parseFloat($('ltcgRate').value);
 
     // Holding period info
@@ -856,7 +869,7 @@
     $('emptyState').style.display = 'none';
     $('scenariosSection').style.display = 'block';
 
-    const base = { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS, ordRate };
+    const base = { offeringFMV, purchaseFMV, pricePaid, numShares, salePricePS, ordRate, discountRate };
 
     // Determine which scenario is current based on sale date
     let currentScenario = null;
@@ -870,14 +883,16 @@
 
     // Key per-share values for formulas
     const bargainPS      = purchaseFMV - pricePaid;          // disqualifying ordinary income/share
-    // IRC §423(c): qualifying ordInc = min(salePrice − pricePaid, 15% × offeringFMV)
-    const qDiscountPS    = ESPP_DISCOUNT_RATE * offeringFMV; // (1) discount measured at the GRANT date
+    // IRC §423(c): qualifying ordInc = min(salePrice − pricePaid, discountRate × offeringFMV)
+    const qDiscountPS    = discountRate * offeringFMV;       // (1) discount measured at the GRANT date
     const actualGainPS   = salePricePS - pricePaid;          // (2) actual total gain
     const qOrdIncPS      = Math.max(0, Math.min(qDiscountPS, actualGainPS));
     const qAdjBasisPS    = pricePaid + qOrdIncPS;
     const disqCapGainPS  = salePricePS - purchaseFMV;
     const qCapGainPS     = salePricePS - qAdjBasisPS;
-    const discountPct    = (ESPP_DISCOUNT_RATE * 100).toFixed(0) + '%';
+    // "15%", "12.5%" — drop the decimal when it adds nothing
+    const pctNum         = discountRate * 100;
+    const discountPct    = pctNum.toFixed(Number.isInteger(pctNum) ? 0 : 1) + '%';
 
     const stockFlat = purchaseFMV === offeringFMV;
 
@@ -927,7 +942,7 @@
       fmtPS(qOrdIncPS),
       qOrdIncWorse
         ? `The cap is the ${discountPct} discount measured at the <em>offering</em> date (${fmtPS(qDiscountPS)}), not the discount you actually got at purchase (${fmtPS(bargainPS)}) — the stock fell from ${fmt$(offeringFMV)} to ${fmt$(purchaseFMV)}, so the offering date figure is the bigger of the two. At this sale price that makes qualifying report ${fmtPS(qOrdIncPenaltyPS)} <em>more</em> ordinary income than a disqualifying sale.`
-        : `Assumes the standard ${discountPct} ESPP discount. The cap is ${fmtPS(qDiscountPS)}; below that, ordinary income is just your actual gain (${fmtPS(actualGainPS)}), so a sale at or under your purchase price reports none at all.`
+        : `Using your plan's ${discountPct} discount, the cap is ${fmtPS(qDiscountPS)}. Below that, ordinary income is just your actual gain (${fmtPS(actualGainPS)}), so a sale at or under your purchase price reports none at all.`
     );
 
     const qCapStep = step(
