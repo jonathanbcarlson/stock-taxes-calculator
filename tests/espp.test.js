@@ -2,7 +2,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  STD_DEDUCTION_2026,
+  STD_DEDUCTION_2026, ESPP_DISCOUNT_RATE,
   getTaxableIncome, getMarginalRate, getLTCGRate, calcScenario,
 } = require('../lib/espp-core.js');
 
@@ -303,6 +303,76 @@ describe('calcScenario — qualifying: stock fell and stayed down (qualifying st
   it('beats long-term disqualifying ($66)', () => {
     assert.ok(r.totalTax < ltd.totalTax,
       `qualifying ${r.totalTax} should beat disqualifying ${ltd.totalTax}`);
+  });
+});
+
+
+// ── calcScenario — the configurable plan discount ────────────────────────────
+//
+// The discount only reaches the §423(c) cap, so it moves qualifying dispositions and
+// leaves disqualifying ones alone. It defaults to 15%, the §423(b)(6) maximum.
+
+describe('ESPP_DISCOUNT_RATE', () => {
+  it('is 15% — the statutory maximum under §423(b)(6)', () => {
+    assert.strictEqual(ESPP_DISCOUNT_RATE, 0.15);
+  });
+});
+
+describe('calcScenario — discountRate defaults to 15% when omitted', () => {
+  const lot = {
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 17,
+    numShares: 100,  salePricePS: 25,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: true,
+  };
+
+  it('omitted matches an explicit 0.15', () => {
+    assert.deepStrictEqual(calcScenario(lot), calcScenario({ ...lot, discountRate: 0.15 }));
+  });
+  it('omitted matches an explicit ESPP_DISCOUNT_RATE', () => {
+    assert.deepStrictEqual(calcScenario(lot), calcScenario({ ...lot, discountRate: ESPP_DISCOUNT_RATE }));
+  });
+});
+
+describe('calcScenario — a smaller plan discount lowers the qualifying cap', () => {
+  // A 10% lookback plan on the same $30 → $20 drop: pricePaid = 90% × $20 = $18,
+  // and the cap is 10% × $30 = $3.00 rather than 15% × $30 = $4.50.
+  const lot = {
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 18,
+    numShares: 100,  salePricePS: 25,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: true,
+  };
+  const ten = calcScenario({ ...lot, discountRate: 0.10 });
+
+  it('ordinaryIncome — capped at 10% × $30 × 100', () => assert.strictEqual(ten.ordinaryIncome, 300));
+  it('capitalGain — the remainder of the gain',    () => assert.strictEqual(ten.capitalGain,    400));
+
+  it('reports less ordinary income than the same lot at 15%', () => {
+    const fifteen = calcScenario({ ...lot, discountRate: 0.15 });
+    assert.strictEqual(fifteen.ordinaryIncome, 450);
+    assert.ok(ten.ordinaryIncome < fifteen.ordinaryIncome);
+  });
+
+  it('a 0% discount leaves no ordinary income at all', () => {
+    const zero = calcScenario({ ...lot, discountRate: 0 });
+    assert.strictEqual(zero.ordinaryIncome, 0);
+    assert.strictEqual(zero.capitalGain, 700);  // the whole $7/share gain is LTCG
+  });
+});
+
+describe('calcScenario — discountRate does not touch disqualifying dispositions', () => {
+  // Disqualifying ordinary income is purchaseFMV − pricePaid, measured entirely from
+  // the prices; the plan discount never enters it.
+  const lot = {
+    offeringFMV: 30, purchaseFMV: 20, pricePaid: 18,
+    numShares: 100,  salePricePS: 25,
+    ordRate: 0.22, cgRate: 0.15, isQualifying: false,
+  };
+
+  it('identical results at 15%, 10% and 5%', () => {
+    const at15 = calcScenario({ ...lot, discountRate: 0.15 });
+    assert.deepStrictEqual(calcScenario({ ...lot, discountRate: 0.10 }), at15);
+    assert.deepStrictEqual(calcScenario({ ...lot, discountRate: 0.05 }), at15);
+    assert.strictEqual(at15.ordinaryIncome, 200);
   });
 });
 
